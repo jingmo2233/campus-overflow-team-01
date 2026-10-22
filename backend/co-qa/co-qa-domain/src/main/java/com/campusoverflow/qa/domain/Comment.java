@@ -40,7 +40,7 @@ public class Comment {
                 throw new BusinessRuleException("QA-1007", "评论回复只支持一层，不能再回复二级评论");
             }
             if (parent.targetType != targetType || parent.targetId != targetId) {
-                throw new BusinessRuleException("QA-1007", "回复必须与被回复的评论挂在同一内容下");
+                throw new BusinessRuleException("QA-1012", "回复必须与被回复的评论挂在同一内容下");
             }
             parentId = Objects.requireNonNull(parent.id, "被回复的评论尚未分配 ID");
         }

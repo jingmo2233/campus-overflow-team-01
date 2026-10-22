@@ -23,4 +23,13 @@ public record Actor(long userId, String displayName, Role role) implements Seria
     public boolean is(long otherUserId) {
         return userId == otherUserId;
     }
+
+    /**
+     * 是否为「内容的可管理者」：作者本人，或对该内容所属课程有管理权限（教师/助教/管理员）。
+     * 课程管理权限由应用层通过 Identity 上下文的课程成员关系计算后传入，领域层不查库。
+     * 各上下文统一走这里，避免同一段权限判断被复制多份后遗漏更新。
+     */
+    public boolean canManage(long contentAuthorId, boolean managesCourse) {
+        return userId == contentAuthorId || managesCourse;
+    }
 }

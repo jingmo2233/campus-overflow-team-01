@@ -89,7 +89,7 @@ public class Answer {
 
     /** 回答者本人或课程管理者（教师/助教/管理员，由应用层判定）才能修改本回答。 */
     private void ensureCanManage(Actor actor, boolean actorManagesCourse, String code, String message) {
-        if (!actor.is(authorId) && !actorManagesCourse) {
+        if (!actor.canManage(authorId, actorManagesCourse)) {
             throw new ForbiddenException(code, message);
         }
     }

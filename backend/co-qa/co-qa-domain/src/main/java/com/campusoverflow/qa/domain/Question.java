@@ -54,7 +54,8 @@ public class Question {
     }
 
     public static Question post(long authorId, Long courseId, Title title, MarkdownBody body, Tags tags, Instant now) {
-        return new Question(null, authorId, courseId, title, body, tags, null, 0, 0, 0, now, now, null, 0);
+        MarkdownBody checked = Objects.requireNonNull(body).requireAtLeast(MarkdownBody.MIN_QUESTION, "问题正文");
+        return new Question(null, authorId, courseId, title, checked, tags, null, 0, 0, 0, now, now, null, 0);
     }
 
     public static Question reconstitute(Long id, long authorId, Long courseId, Title title, MarkdownBody body,
@@ -69,7 +70,7 @@ public class Question {
         ensureNotDeleted();
         ensureCanManage(actor, actorManagesCourse, "QA-3002", "只有提问者或课程教师/助教可以编辑该问题");
         this.title = Objects.requireNonNull(newTitle);
-        this.body = Objects.requireNonNull(newBody);
+        this.body = Objects.requireNonNull(newBody).requireAtLeast(MarkdownBody.MIN_QUESTION, "问题正文");
         this.tags = Objects.requireNonNull(newTags);
         this.updatedAt = now;
     }
@@ -77,6 +78,8 @@ public class Question {
     /** 采纳最佳答案。 */
     public void accept(Answer answer, Actor actor, boolean actorManagesCourse) {
         ensureNotDeleted();
+        // 先鉴权、后校验归属：否则未授权用户可以借「该回答不属于当前问题」探测回答的真实归属（评审 P2-2）。
+        ensureCanManage(actor, actorManagesCourse, "QA-3001", "只有提问者或课程教师/助教可以采纳");
         Objects.requireNonNull(answer, "answer");
         if (id == null || answer.questionId() != id) {
             throw new BusinessRuleException("QA-1009", "该回答不属于当前问题");
@@ -84,7 +87,6 @@ public class Question {
         if (answer.isDeleted()) {
             throw new BusinessRuleException("QA-1008", "已删除的回答不能被采纳");
         }
-        ensureCanManage(actor, actorManagesCourse, "QA-3001", "只有提问者或课程教师/助教可以采纳");
         if (acceptedAnswerId != null) {
             throw new ConflictException("QA-2002", "问题已采纳，不能重复采纳");
         }
@@ -115,7 +117,7 @@ public class Question {
 
     /** 提问者本人或课程管理者（教师/助教/管理员，由应用层判定）才能修改本问题。 */
     private void ensureCanManage(Actor actor, boolean actorManagesCourse, String code, String message) {
-        if (!actor.is(authorId) && !actorManagesCourse) {
+        if (!actor.canManage(authorId, actorManagesCourse)) {
             throw new ForbiddenException(code, message);
         }
     }

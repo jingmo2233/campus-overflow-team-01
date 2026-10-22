@@ -1,31 +1,20 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './auth';
-import { api } from './api';
-import { QuestionListPage } from './pages/QuestionListPage';
-import { QuestionDetailPage } from './pages/QuestionDetailPage';
-import { AskPage } from './pages/AskPage';
-import { LoginPage } from './pages/LoginPage';
-import { LeaderboardPage } from './pages/LeaderboardPage';
-import { NotificationsPage } from './pages/NotificationsPage';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider, useAuth } from '@/auth';
+import { queryClient } from '@/query/client';
+import { useUnreadCount } from '@/query/hooks';
+import { QuestionListPage } from '@/pages/QuestionListPage';
+import { QuestionDetailPage } from '@/pages/QuestionDetailPage';
+import { AskPage } from '@/pages/AskPage';
+import { LoginPage } from '@/pages/LoginPage';
+import { LeaderboardPage } from '@/pages/LeaderboardPage';
+import { NotificationsPage } from '@/pages/NotificationsPage';
 
 function Header() {
   const { me, logout } = useAuth();
   const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
-
-  useEffect(() => {
-    if (!me) return;
-    const load = () => {
-      void api
-        .unreadCount()
-        .then((r) => setUnread(r.count))
-        .catch(() => undefined);
-    };
-    load();
-    const timer = setInterval(load, 30_000);
-    return () => clearInterval(timer);
-  }, [me]);
+  const { data: unread } = useUnreadCount(!!me);
+  const unreadCount = unread?.count ?? 0;
 
   return (
     <header className="topbar">
@@ -35,7 +24,11 @@ function Header() {
       <nav>
         <Link to="/">问题</Link>
         <Link to="/leaderboard">排行榜</Link>
-        {me && <Link to="/notifications">通知{unread > 0 && <span className="badge">{unread}</span>}</Link>}
+        {me && (
+          <Link to="/notifications">
+            通知{unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+          </Link>
+        )}
       </nav>
       <div className="spacer" />
       {me ? (
@@ -67,34 +60,36 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Header />
-        <main>
-          <Routes>
-            <Route path="/" element={<QuestionListPage />} />
-            <Route path="/questions/:id" element={<QuestionDetailPage />} />
-            <Route
-              path="/ask"
-              element={
-                <RequireAuth>
-                  <AskPage />
-                </RequireAuth>
-              }
-            />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/leaderboard" element={<LeaderboardPage />} />
-            <Route
-              path="/notifications"
-              element={
-                <RequireAuth>
-                  <NotificationsPage />
-                </RequireAuth>
-              }
-            />
-          </Routes>
-        </main>
-      </AuthProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <Header />
+          <main>
+            <Routes>
+              <Route path="/" element={<QuestionListPage />} />
+              <Route path="/questions/:id" element={<QuestionDetailPage />} />
+              <Route
+                path="/ask"
+                element={
+                  <RequireAuth>
+                    <AskPage />
+                  </RequireAuth>
+                }
+              />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route
+                path="/notifications"
+                element={
+                  <RequireAuth>
+                    <NotificationsPage />
+                  </RequireAuth>
+                }
+              />
+            </Routes>
+          </main>
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

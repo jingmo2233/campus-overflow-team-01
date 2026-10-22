@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, errorText } from '../api';
-import { useAuth } from '../auth';
+import { errorText } from '@/api';
+import { useAuth } from '@/auth';
+import { useAskQuestion } from '@/query/hooks';
 
 export function AskPage() {
   const { me } = useAuth();
@@ -10,20 +11,19 @@ export function AskPage() {
   const [body, setBody] = useState('');
   const [tags, setTags] = useState('');
   const [courseId, setCourseId] = useState<string>('');
-  const [error, setError] = useState('');
 
-  const submit = async () => {
-    try {
-      const { id } = await api.ask({
+  const ask = useAskQuestion();
+
+  const submit = () => {
+    ask.mutate(
+      {
         courseId: courseId ? Number(courseId) : undefined,
         title,
         body,
         tags: tags.split(/[,，\s]+/).filter(Boolean),
-      });
-      navigate(`/questions/${id}`);
-    } catch (e) {
-      setError(errorText(e));
-    }
+      },
+      { onSuccess: ({ id }) => navigate(`/questions/${id}`) },
+    );
   };
 
   return (
@@ -52,14 +52,9 @@ export function AskPage() {
           ))}
         </select>
       </label>
-      {error && <p className="error">{error}</p>}
-      <button
-        className="primary"
-        onClick={() => {
-          void submit();
-        }}
-      >
-        发布问题
+      {ask.error && <p className="error">{errorText(ask.error)}</p>}
+      <button className="primary" disabled={ask.isPending} onClick={submit}>
+        {ask.isPending ? '发布中…' : '发布问题'}
       </button>
     </div>
   );

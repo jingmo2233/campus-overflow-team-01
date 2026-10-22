@@ -1,41 +1,41 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, errorText } from '../api';
-import { useAuth } from '../auth';
-import type { QuestionDetail } from '../types';
+import { errorText } from '@/api';
+import { useAuth } from '@/auth';
+import {
+  useAcceptAnswer,
+  useEndorseAnswer,
+  useOpenBounty,
+  usePostComment,
+  useQuestion,
+  useRelatedQuestions,
+  useSubmitAnswer,
+  useVote,
+} from '@/query/hooks';
 
 export function QuestionDetailPage() {
   const { id } = useParams();
   const questionId = Number(id);
   const { me } = useAuth();
-  const [q, setQ] = useState<QuestionDetail | null>(null);
-  const [related, setRelated] = useState<{ id: number; title: string }[]>([]);
   const [draft, setDraft] = useState('');
-  const [error, setError] = useState('');
 
-  const load = useCallback(() => {
-    void api
-      .question(questionId)
-      .then(setQ)
-      .catch((e: unknown) => setError(errorText(e)));
-  }, [questionId]);
+  const { data: q, error, isPending } = useQuestion(questionId);
+  const { data: related = [] } = useRelatedQuestions(questionId);
 
-  useEffect(() => {
-    load();
-    void api
-      .related(questionId)
-      .then(setRelated)
-      .catch(() => undefined);
-  }, [load, questionId]);
+  const vote = useVote(questionId);
+  const submitAnswer = useSubmitAnswer(questionId);
+  const acceptAnswer = useAcceptAnswer(questionId);
+  const endorseAnswer = useEndorseAnswer(questionId);
+  const openBounty = useOpenBounty(questionId);
 
-  /** 执行一次写操作后重新拉取详情；异常统一落到页面底部的错误提示。 */
-  const act = (fn: () => Promise<unknown>): void => {
-    void fn()
-      .then(load)
-      .catch((e: unknown) => setError(errorText(e)));
-  };
+  // 写操作的错误集中展示：取第一个失败的 mutation
+  const actionError = [vote, submitAnswer, acceptAnswer, endorseAnswer, openBounty].find(
+    (m) => m.error,
+  )?.error;
+  const message = error ?? actionError;
 
-  if (!q) return <p className="muted">{error || '加载中…'}</p>;
+  if (isPending) return <p className="muted">加载中…</p>;
+  if (!q) return <p className="error">{message ? errorText(message) : '问题不存在或已删除。'}</p>;
 
   const canManage = q.permissions.canManage;
 
@@ -51,15 +51,19 @@ export function QuestionDetailPage() {
         <div className="post">
           <div className="votebox">
             <button
-              disabled={!me}
-              onClick={() => act(() => api.vote('QUESTION', q.id, q.myVote === 1 ? 0 : 1))}
+              disabled={!me || vote.isPending}
+              onClick={() =>
+                vote.mutate({ targetType: 'QUESTION', targetId: q.id, value: q.myVote === 1 ? 0 : 1 })
+              }
             >
               ▲
             </button>
             <b>{q.score}</b>
             <button
-              disabled={!me}
-              onClick={() => act(() => api.vote('QUESTION', q.id, q.myVote === -1 ? 0 : -1))}
+              disabled={!me || vote.isPending}
+              onClick={() =>
+                vote.mutate({ targetType: 'QUESTION', targetId: q.id, value: q.myVote === -1 ? 0 : -1 })
+              }
             >
               ▼
             </button>
@@ -78,15 +82,16 @@ export function QuestionDetailPage() {
               comments={q.comments}
               targetType="QUESTION"
               targetId={q.id}
-              onDone={load}
+              questionId={questionId}
               canComment={!!me}
             />
             {canManage && (
               <button
                 className="link"
+                disabled={openBounty.isPending}
                 onClick={() => {
                   const points = Number(prompt('悬赏积分（10–500）', '50'));
-                  if (points) act(() => api.bounty(q.id, points, 7));
+                  if (points) openBounty.mutate({ points, days: 7 });
                 }}
               >
                 发起悬赏
@@ -104,15 +109,19 @@ export function QuestionDetailPage() {
           >
             <div className="votebox">
               <button
-                disabled={!me}
-                onClick={() => act(() => api.vote('ANSWER', a.id, a.myVote === 1 ? 0 : 1))}
+                disabled={!me || vote.isPending}
+                onClick={() =>
+                  vote.mutate({ targetType: 'ANSWER', targetId: a.id, value: a.myVote === 1 ? 0 : 1 })
+                }
               >
                 ▲
               </button>
               <b>{a.score}</b>
               <button
-                disabled={!me}
-                onClick={() => act(() => api.vote('ANSWER', a.id, a.myVote === -1 ? 0 : -1))}
+                disabled={!me || vote.isPending}
+                onClick={() =>
+                  vote.mutate({ targetType: 'ANSWER', targetId: a.id, value: a.myVote === -1 ? 0 : -1 })
+                }
               >
                 ▼
               </button>
@@ -132,17 +141,21 @@ export function QuestionDetailPage() {
               </p>
               <div className="actions">
                 {q.permissions.canAccept && !q.acceptedAnswerId && (
-                  <button onClick={() => act(() => api.accept(q.id, a.id))}>采纳此回答</button>
+                  <button disabled={acceptAnswer.isPending} onClick={() => acceptAnswer.mutate(a.id)}>
+                    采纳此回答
+                  </button>
                 )}
                 {canManage && !a.endorsedBy && (
-                  <button onClick={() => act(() => api.endorse(a.id))}>教师认证</button>
+                  <button disabled={endorseAnswer.isPending} onClick={() => endorseAnswer.mutate(a.id)}>
+                    教师认证
+                  </button>
                 )}
               </div>
               <CommentList
                 comments={a.comments}
                 targetType="ANSWER"
                 targetId={a.id}
-                onDone={load}
+                questionId={questionId}
                 canComment={!!me}
               />
             </div>
@@ -160,14 +173,10 @@ export function QuestionDetailPage() {
             />
             <button
               className="primary"
-              onClick={() =>
-                act(async () => {
-                  await api.answer(q.id, draft);
-                  setDraft('');
-                })
-              }
+              disabled={submitAnswer.isPending}
+              onClick={() => submitAnswer.mutate(draft, { onSuccess: () => setDraft('') })}
             >
-              提交回答
+              {submitAnswer.isPending ? '提交中…' : '提交回答'}
             </button>
           </section>
         ) : (
@@ -175,7 +184,7 @@ export function QuestionDetailPage() {
             <Link to="/login">登录</Link>后可以回答与投票。
           </p>
         )}
-        {error && <p className="error">{error}</p>}
+        {message && <p className="error">{errorText(message)}</p>}
       </article>
 
       <aside>
@@ -197,17 +206,19 @@ function CommentList({
   comments,
   targetType,
   targetId,
-  onDone,
+  questionId,
   canComment,
 }: {
   comments: { id: number; author: { displayName: string }; body: string; createdAt: string }[];
   targetType: 'QUESTION' | 'ANSWER';
   targetId: number;
-  onDone: () => void;
+  questionId: number;
   canComment: boolean;
 }) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
+  const postComment = usePostComment(questionId);
+
   return (
     <div className="comments">
       {comments.map((c) => (
@@ -225,16 +236,22 @@ function CommentList({
               placeholder="评论，可用 @昵称 提醒他人"
             />
             <button
-              onClick={() => {
-                void api.comment(targetType, targetId, text).then(() => {
-                  setText('');
-                  setOpen(false);
-                  onDone();
-                });
-              }}
+              disabled={postComment.isPending}
+              onClick={() =>
+                postComment.mutate(
+                  { targetType, targetId, body: text },
+                  {
+                    onSuccess: () => {
+                      setText('');
+                      setOpen(false);
+                    },
+                  },
+                )
+              }
             >
               发表
             </button>
+            {postComment.error && <span className="error">{errorText(postComment.error)}</span>}
           </div>
         ) : (
           <button className="link" onClick={() => setOpen(true)}>

@@ -1,39 +1,28 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
-import type { Notification } from '../types';
+import { errorText } from '@/api';
+import { useMarkAllRead, useNotifications } from '@/query/hooks';
 
 export function NotificationsPage() {
-  const [items, setItems] = useState<Notification[]>([]);
-
-  const load = () =>
-    api
-      .notifications()
-      .then((p) => setItems(p.items))
-      .catch(() => undefined);
-
-  useEffect(() => {
-    void load();
-  }, []);
+  const { data, error, isPending } = useNotifications();
+  const markAllRead = useMarkAllRead();
+  const items = data?.items ?? [];
 
   return (
     <div className="form-page">
       <h1>通知</h1>
-      <button
-        onClick={() => {
-          void api.readAll().then(load);
-        }}
-      >
+      <button disabled={markAllRead.isPending || items.length === 0} onClick={() => markAllRead.mutate()}>
         全部标记为已读
       </button>
+      {error && <p className="error">{errorText(error)}</p>}
       <ul className="plain">
         {items.map((n) => (
           <li key={n.id} className={n.read ? 'muted' : ''}>
-            <Link to={n.link.replace(/^\//, '/')}>{n.title}</Link>
+            <Link to={n.link}>{n.title}</Link>
             <span className="muted"> · {new Date(n.createdAt).toLocaleString('zh-CN')}</span>
           </li>
         ))}
-        {items.length === 0 && <li className="muted">暂时没有通知。</li>}
+        {isPending && <li className="muted">加载中…</li>}
+        {!isPending && items.length === 0 && <li className="muted">暂时没有通知。</li>}
       </ul>
     </div>
   );

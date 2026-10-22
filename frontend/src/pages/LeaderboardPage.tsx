@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { api } from '../api';
-import type { LeaderboardEntry } from '../types';
+import { useState } from 'react';
+import { errorText } from '@/api';
+import { useLeaderboard } from '@/query/hooks';
 
 const PERIODS = [
   ['week', '本周'],
@@ -11,14 +11,7 @@ const PERIODS = [
 
 export function LeaderboardPage() {
   const [period, setPeriod] = useState<string>('week');
-  const [rows, setRows] = useState<LeaderboardEntry[]>([]);
-
-  useEffect(() => {
-    api
-      .leaderboard(period)
-      .then(setRows)
-      .catch(() => setRows([]));
-  }, [period]);
+  const { data: rows = [], error, isPending } = useLeaderboard(period);
 
   return (
     <div className="form-page">
@@ -30,6 +23,7 @@ export function LeaderboardPage() {
           </button>
         ))}
       </div>
+      {error && <p className="error">{errorText(error)}</p>}
       <table className="board">
         <thead>
           <tr>
@@ -55,7 +49,8 @@ export function LeaderboardPage() {
           ))}
         </tbody>
       </table>
-      {rows.length === 0 && <p className="muted">这个周期还没有数据。</p>}
+      {isPending && <p className="muted">加载中…</p>}
+      {!isPending && !error && rows.length === 0 && <p className="muted">这个周期还没有数据。</p>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, errorText } from '../api';
-import { useAuth } from '../auth';
+import { api, errorText } from '@/api';
+import { useAuth } from '@/auth';
 
 export function LoginPage() {
   const { login } = useAuth();

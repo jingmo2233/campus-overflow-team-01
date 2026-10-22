@@ -1,38 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, errorText } from '../api';
-import { useAuth } from '../auth';
-import type { Page, QuestionSummary, SearchResult } from '../types';
+import { errorText } from '@/api';
+import { useAuth } from '@/auth';
+import { useDebounced } from '@/hooks/useDebounced';
+import { usePopularTags, useQuestionList } from '@/query/hooks';
 
 export function QuestionListPage() {
   const { me } = useAuth();
-  const [data, setData] = useState<Page<QuestionSummary | SearchResult> | null>(null);
-  const [tags, setTags] = useState<{ name: string; questionCount: number }[]>([]);
   const [keyword, setKeyword] = useState('');
   const [activeTag, setActiveTag] = useState<string | undefined>();
   const [sort, setSort] = useState('newest');
   const [unanswered, setUnanswered] = useState(false);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    void api
-      .popularTags()
-      .then(setTags)
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const searching = keyword.trim() !== '' || activeTag || unanswered || sort !== 'newest';
-    const promise = searching
-      ? api.search(keyword.trim(), { tag: activeTag, sort, unanswered })
-      : api.questions(1);
-    void promise
-      .then((r) => {
-        setData(r);
-        setError('');
-      })
-      .catch((e: unknown) => setError(errorText(e)));
-  }, [keyword, activeTag, sort, unanswered]);
+  const debouncedKeyword = useDebounced(keyword);
+  const { data, error, isPending } = useQuestionList({
+    keyword: debouncedKeyword,
+    tag: activeTag,
+    sort,
+    unanswered,
+  });
+  const { data: tags = [] } = usePopularTags();
 
   return (
     <div className="layout">
@@ -65,7 +52,7 @@ export function QuestionListPage() {
             标签筛选：<b>{activeTag}</b> <button onClick={() => setActiveTag(undefined)}>清除</button>
           </p>
         )}
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error">{errorText(error)}</p>}
 
         <ul className="qlist">
           {data?.items.map((q) => (
@@ -98,6 +85,7 @@ export function QuestionListPage() {
             </li>
           ))}
         </ul>
+        {isPending && <p className="muted">加载中…</p>}
         {data && data.items.length === 0 && <p className="muted">没有匹配的问题，换个关键词试试。</p>}
       </section>
 

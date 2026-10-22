@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api } from './api';
-import type { Me } from './types';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/api';
+import { qk } from '@/query/keys';
+import type { Me } from '@/types';
 
 interface AuthState {
   me: Me | null;
@@ -13,46 +15,55 @@ interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    try {
-      setMe(await api.me());
-    } catch {
-      setMe(null); // 401 表示未登录，属于正常状态
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const client = useQueryClient();
+  // 写请求需要 CSRF token，拿到之前先不探测登录态，避免首个请求必定 403
+  const [csrfReady, setCsrfReady] = useState(false);
+  const requested = useRef(false);
 
   useEffect(() => {
-    // 先换到 CSRF token 再探测登录态；拿不到 token 也要继续探测，由 /me 决定是否已登录
+    if (requested.current) return; // StrictMode 下 effect 会跑两次
+    requested.current = true;
     void api
       .csrf()
-      .catch(() => undefined)
-      .then(refresh);
-  }, [refresh]);
+      .catch(() => undefined) // 拿不到也继续，由 /me 决定是否已登录
+      .finally(() => setCsrfReady(true));
+  }, []);
+
+  const { data, isPending } = useQuery({
+    queryKey: qk.me,
+    // 401 表示未登录，是正常状态而非错误，统一折叠成 null
+    queryFn: () => api.me().catch(() => null),
+    enabled: csrfReady,
+    staleTime: Infinity,
+  });
 
   const value = useMemo<AuthState>(
     () => ({
-      me,
-      loading,
-      login: async (username, password) => setMe(await api.login(username, password)),
+      me: data ?? null,
+      loading: !csrfReady || isPending,
+      login: async (username, password) => {
+        const me = await api.login(username, password);
+        client.setQueryData(qk.me, me);
+        // 换了身份，所有带权限视角的数据（myVote、permissions）都要重取
+        await client.invalidateQueries();
+      },
       logout: async () => {
         await api.logout();
-        setMe(null);
+        client.setQueryData(qk.me, null);
+        client.clear(); // 避免下一个登录者看到上一个人的缓存
       },
-      refresh,
+      refresh: async () => {
+        await client.invalidateQueries({ queryKey: qk.me });
+      },
     }),
-    [me, loading, refresh],
+    [data, csrfReady, isPending, client],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // 与 AuthProvider 同文件导出 hook 会让 Fast Refresh 退化为整页刷新。
-// 待 Lab 5 第 2 步把登录态迁到 Zustand 后，本文件连同这条豁免一起移除。
+// 拆成单独文件需要导出 AuthContext，那样同样触发本规则，故在此豁免。
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);

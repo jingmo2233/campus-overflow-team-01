@@ -1,0 +1,5 @@
+# pnpm 10+ 默认拦截依赖的 postinstall 脚本，需要显式放行。
+# esbuild 是 vite 的构建依赖，不放行则 pnpm install 直接报 ERR_PNPM_IGNORED_BUILDS。
+# 注意：pnpm 12 的键名是 allowBuilds，旧版的 onlyBuiltDependencies 已失效。
+allowBuilds:
+  esbuild: true

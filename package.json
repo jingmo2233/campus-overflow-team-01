@@ -1,0 +1,12 @@
+{
+  "name": "campus-overflow",
+  "private": true,
+  "description": "仓库级工具配置。Git 钩子必须装在 git 根目录，而前端代码在 frontend/，故单独保留这个最小清单。",
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

@@ -1,16 +1,44 @@
 import type {
-  LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
+  LeaderboardEntry,
+  Me,
+  Notification,
+  Page,
+  QuestionDetail,
+  QuestionSummary,
+  ReputationProfile,
+  SearchResult,
 } from './types';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
     super(message);
   }
 }
 
+/** 后端 Problem Details 响应体中本项目用到的字段。 */
+interface ProblemDetails {
+  code?: string;
+  detail?: string;
+}
+
+/**
+ * 把未知异常转成可展示的文案。
+ * 注意：业务分支一律用 `ApiError.code` 判断，不要匹配这里返回的提示文案（团队章程 4.3）。
+ */
+export function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : '请求失败';
+}
+
 function cookie(name: string): string | undefined {
-  return document.cookie.split('; ').find((c) => c.startsWith(`${name}=`))?.split('=')[1];
+  return document.cookie
+    .split('; ')
+    .find((c) => c.startsWith(`${name}=`))
+    ?.split('=')[1];
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -26,14 +54,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (token) headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
   }
   const res = await fetch(`/api${path}`, {
-    method, headers, credentials: 'include',
+    method,
+    headers,
+    credentials: 'include',
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  const data: unknown = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
-    throw new ApiError(res.status, data?.code ?? 'SYS-000', data?.detail ?? '请求失败');
+    const problem = (data ?? {}) as ProblemDetails;
+    throw new ApiError(res.status, problem.code ?? 'SYS-000', problem.detail ?? '请求失败');
   }
   return data as T;
 }
@@ -43,7 +74,8 @@ const get = <T>(path: string) => request<T>('GET', path);
 export const api = {
   csrf: () => get<{ token: string }>('/v1/auth/csrf'),
   register: (body: Record<string, string>) => request<{ id: number }>('POST', '/v1/auth/register', body),
-  login: (username: string, password: string) => request<Me>('POST', '/v1/auth/login', { username, password }),
+  login: (username: string, password: string) =>
+    request<Me>('POST', '/v1/auth/login', { username, password }),
   logout: () => request<void>('POST', '/v1/auth/logout'),
   me: () => get<Me>('/v1/auth/me'),
 
@@ -71,7 +103,9 @@ export const api = {
     return get<Page<SearchResult>>(`/v1/search/questions?${search}`);
   },
   related: (questionId: number) =>
-    get<{ id: number; title: string; answerCount: number; accepted: boolean }[]>(`/v1/questions/${questionId}/related`),
+    get<{ id: number; title: string; answerCount: number; accepted: boolean }[]>(
+      `/v1/questions/${questionId}/related`,
+    ),
   popularTags: () => get<{ name: string; questionCount: number }[]>('/v1/tags/popular?limit=15'),
 
   leaderboard: (period: string) => get<LeaderboardEntry[]>(`/v1/leaderboard?period=${period}`),

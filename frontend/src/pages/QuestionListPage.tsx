@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
+import { api, errorText } from '../api';
 import { useAuth } from '../auth';
 import type { Page, QuestionSummary, SearchResult } from '../types';
 
@@ -15,7 +15,10 @@ export function QuestionListPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.popularTags().then(setTags).catch(() => undefined);
+    void api
+      .popularTags()
+      .then(setTags)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -23,15 +26,23 @@ export function QuestionListPage() {
     const promise = searching
       ? api.search(keyword.trim(), { tag: activeTag, sort, unanswered })
       : api.questions(1);
-    promise.then((r) => { setData(r); setError(''); }).catch((e) => setError(e.message));
+    void promise
+      .then((r) => {
+        setData(r);
+        setError('');
+      })
+      .catch((e: unknown) => setError(errorText(e)));
   }, [keyword, activeTag, sort, unanswered]);
 
   return (
     <div className="layout">
       <section>
         <div className="toolbar">
-          <input placeholder="搜索问题（支持中文全文检索）" value={keyword}
-                 onChange={(e) => setKeyword(e.target.value)} />
+          <input
+            placeholder="搜索问题（支持中文全文检索）"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
           <select value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="newest">最新</option>
             <option value="active">最近活跃</option>
@@ -42,7 +53,11 @@ export function QuestionListPage() {
             <input type="checkbox" checked={unanswered} onChange={(e) => setUnanswered(e.target.checked)} />
             仅看未回答
           </label>
-          {me && <Link className="primary" to="/ask">我要提问</Link>}
+          {me && (
+            <Link className="primary" to="/ask">
+              我要提问
+            </Link>
+          )}
         </div>
 
         {activeTag && (
@@ -56,15 +71,25 @@ export function QuestionListPage() {
           {data?.items.map((q) => (
             <li key={q.id}>
               <div className="stats">
-                <span><b>{q.score}</b> 票</span>
-                <span className={q.accepted ? 'accepted' : ''}><b>{q.answerCount}</b> 回答</span>
+                <span>
+                  <b>{q.score}</b> 票
+                </span>
+                <span className={q.accepted ? 'accepted' : ''}>
+                  <b>{q.answerCount}</b> 回答
+                </span>
                 <span>{q.viewCount} 浏览</span>
               </div>
               <div className="qmain">
-                <Link className="qtitle" to={`/questions/${q.id}`}>{q.title}</Link>
+                <Link className="qtitle" to={`/questions/${q.id}`}>
+                  {q.title}
+                </Link>
                 <p className="excerpt">{q.excerpt}</p>
                 <div className="tagrow">
-                  {q.tags.map((t) => <button key={t} className="tag" onClick={() => setActiveTag(t)}>{t}</button>)}
+                  {q.tags.map((t) => (
+                    <button key={t} className="tag" onClick={() => setActiveTag(t)}>
+                      {t}
+                    </button>
+                  ))}
                   <span className="muted">
                     {q.author.displayName} · {new Date(q.createdAt).toLocaleString('zh-CN')}
                   </span>
@@ -81,7 +106,8 @@ export function QuestionListPage() {
         <div className="tagrow">
           {tags.map((t) => (
             <button key={t.name} className="tag" onClick={() => setActiveTag(t.name)}>
-              {t.name}<span className="count">{t.questionCount}</span>
+              {t.name}
+              <span className="count">{t.questionCount}</span>
             </button>
           ))}
         </div>

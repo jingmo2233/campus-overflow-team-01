@@ -7,3 +7,9 @@ dist/
 *.iml
 .DS_Store
 .env
+
+# husky 自带的运行时脚本，由 pnpm install 的 prepare 钩子自动生成
+.husky/_/
+
+# TypeScript 增量构建缓存
+*.tsbuildinfo

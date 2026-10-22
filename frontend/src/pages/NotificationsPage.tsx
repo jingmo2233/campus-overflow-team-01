@@ -6,13 +6,26 @@ import type { Notification } from '../types';
 export function NotificationsPage() {
   const [items, setItems] = useState<Notification[]>([]);
 
-  const load = () => api.notifications().then((p) => setItems(p.items)).catch(() => undefined);
-  useEffect(() => { load(); }, []);
+  const load = () =>
+    api
+      .notifications()
+      .then((p) => setItems(p.items))
+      .catch(() => undefined);
+
+  useEffect(() => {
+    void load();
+  }, []);
 
   return (
     <div className="form-page">
       <h1>通知</h1>
-      <button onClick={() => api.readAll().then(load)}>全部标记为已读</button>
+      <button
+        onClick={() => {
+          void api.readAll().then(load);
+        }}
+      >
+        全部标记为已读
+      </button>
       <ul className="plain">
         {items.map((n) => (
           <li key={n.id} className={n.read ? 'muted' : ''}>

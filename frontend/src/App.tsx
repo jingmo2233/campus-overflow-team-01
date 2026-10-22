@@ -16,7 +16,12 @@ function Header() {
 
   useEffect(() => {
     if (!me) return;
-    const load = () => api.unreadCount().then((r) => setUnread(r.count)).catch(() => undefined);
+    const load = () => {
+      void api
+        .unreadCount()
+        .then((r) => setUnread(r.count))
+        .catch(() => undefined);
+    };
     load();
     const timer = setInterval(load, 30_000);
     return () => clearInterval(timer);
@@ -24,7 +29,9 @@ function Header() {
 
   return (
     <header className="topbar">
-      <Link className="brand" to="/">CampusOverflow</Link>
+      <Link className="brand" to="/">
+        CampusOverflow
+      </Link>
       <nav>
         <Link to="/">问题</Link>
         <Link to="/leaderboard">排行榜</Link>
@@ -35,10 +42,18 @@ function Header() {
         <div className="user">
           <span>{me.displayName}</span>
           <span className="role">{me.role}</span>
-          <button onClick={() => logout().then(() => navigate('/'))}>退出</button>
+          <button
+            onClick={() => {
+              void logout().then(() => navigate('/'));
+            }}
+          >
+            退出
+          </button>
         </div>
       ) : (
-        <Link className="primary" to="/login">登录 / 注册</Link>
+        <Link className="primary" to="/login">
+          登录 / 注册
+        </Link>
       )}
     </header>
   );
@@ -59,10 +74,24 @@ export function App() {
           <Routes>
             <Route path="/" element={<QuestionListPage />} />
             <Route path="/questions/:id" element={<QuestionDetailPage />} />
-            <Route path="/ask" element={<RequireAuth><AskPage /></RequireAuth>} />
+            <Route
+              path="/ask"
+              element={
+                <RequireAuth>
+                  <AskPage />
+                </RequireAuth>
+              }
+            />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
-            <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+            <Route
+              path="/notifications"
+              element={
+                <RequireAuth>
+                  <NotificationsPage />
+                </RequireAuth>
+              }
+            />
           </Routes>
         </main>
       </AuthProvider>

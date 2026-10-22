@@ -1,0 +1,8 @@
+# 前端改动走 lint-staged：只对暂存的文件跑 ESLint 与 Prettier。
+# 没装前端依赖（例如只改后端 Java 的同学）时直接跳过，不阻塞提交。
+if [ ! -d frontend/node_modules ]; then
+  echo "husky: 跳过前端检查（frontend/node_modules 不存在，先在 frontend 下执行 pnpm install）"
+  exit 0
+fi
+
+cd frontend && pnpm exec lint-staged

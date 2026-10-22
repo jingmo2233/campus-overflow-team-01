@@ -48,12 +48,63 @@ public class VoteService {
 
     @Transactional
     public VoteResult cast(Actor actor, TargetType type, long targetId, int value) {
-        // TODO(S2)：实现 VoteService.cast——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：VoteService.cast 尚未实现");
+        Target target = resolve(type, targetId);
+        // 撤销（value = 0）走不到 Vote.cast，所以自投票的判定必须在这里显式做一次。
+        if (target.authorId() == actor.userId()) {
+            throw new BusinessRuleException("QA-1015", "不能给自己的内容投票");
+        }
+
+        Optional<Vote> existing = votes.find(actor.userId(), type, targetId);
+        int oldValue = existing.map(Vote::value).orElse(0);
+        // PUT 语义要幂等：重复提交同一个值既不改计数也不发事件，否则声誉会被重复结算。
+        if (value == oldValue) {
+            return new VoteResult(oldValue, 0);
+        }
+
+        if (value == 0) {
+            votes.delete(existing.orElseThrow());
+        } else if (existing.isPresent()) {
+            Vote vote = existing.get();
+            vote.change(value, clock.instant());
+            votes.save(vote);
+        } else {
+            votes.save(Vote.cast(actor.userId(), target.authorId(), type, targetId, value, clock.instant()));
+        }
+
+        // 改投 +1 → -1 的增量是 -2，不是 -1；用「新值 − 旧值」统一覆盖投票、改投、撤销三种情况。
+        int delta = value - oldValue;
+        adjustScore(type, targetId, delta);
+        events.publish(new VoteCastEvent(EventIds.next(), clock.instant(), type.name(), targetId, target.authorId(),
+                actor.userId(), target.questionId(), oldValue, value));
+        return new VoteResult(value, delta);
     }
 
+    private void adjustScore(TargetType type, long targetId, int delta) {
+        switch (type) {
+            case QUESTION -> questions.adjustScore(targetId, delta);
+            case ANSWER -> answers.adjustScore(targetId, delta);
+        }
+    }
+
+    /** 解析投票目标的作者与所属问题：前者用于自投票判定与声誉结算，后者让下游能定位到问题。 */
     private Target resolve(TargetType type, long targetId) {
-        // TODO(S2)：实现 VoteService.resolve——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：VoteService.resolve 尚未实现");
+        return switch (type) {
+            case QUESTION -> {
+                Question question = questions.findById(targetId)
+                        .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在"));
+                if (question.isDeleted()) {
+                    throw new BusinessRuleException("QA-1008", "问题已删除，不能投票");
+                }
+                yield new Target(question.authorId(), question.id());
+            }
+            case ANSWER -> {
+                Answer answer = answers.findById(targetId)
+                        .orElseThrow(() -> new NotFoundException("QA-4002", "回答不存在"));
+                if (answer.isDeleted()) {
+                    throw new BusinessRuleException("QA-1008", "回答已删除，不能投票");
+                }
+                yield new Target(answer.authorId(), answer.questionId());
+            }
+        };
     }
 }

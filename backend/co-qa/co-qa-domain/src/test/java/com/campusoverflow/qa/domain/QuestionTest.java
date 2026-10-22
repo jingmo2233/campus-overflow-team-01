@@ -60,6 +60,52 @@ class QuestionTest {
             assertThatThrownBy(() -> new TagName("<script>")).isInstanceOf(BusinessRuleException.class);
             assertThat(new TagName("C++").value()).isEqualTo("c++");
         }
+
+        @Test
+        void rejectsNullTagsAndNullTagName() {
+            assertThatThrownBy(() -> Tags.of(null)).isInstanceOf(BusinessRuleException.class);
+            assertThatThrownBy(() -> new TagName(null)).isInstanceOf(BusinessRuleException.class);
+        }
+
+        /** record 的规范构造器是 public 的，保底校验必须挡住绕过工厂的构造。 */
+        @Test
+        void markdownBodyRejectsBlankOrOverlongEvenViaCanonicalConstructor() {
+            assertThatThrownBy(() -> new MarkdownBody(null)).isInstanceOf(BusinessRuleException.class);
+            assertThatThrownBy(() -> new MarkdownBody("   ")).isInstanceOf(BusinessRuleException.class);
+            assertThatThrownBy(() -> new MarkdownBody("太短")).isInstanceOf(BusinessRuleException.class);
+            assertThatThrownBy(() -> new MarkdownBody("长".repeat(30001)))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
+
+        /** 11 字能过 MarkdownBody 的保底下限（10），但过不了问题正文的 20 字下限。 */
+        @Test
+        void questionBodyNeedsTwentyCharsEvenWhenBodyObjectIsValid() {
+            assertThatThrownBy(() -> MarkdownBody.ofQuestion("这段正文只有十一个字符"))
+                    .isInstanceOf(BusinessRuleException.class);
+
+            MarkdownBody smuggled = new MarkdownBody("这段正文只有十一个字符");
+            assertThatThrownBy(() -> Question.post(ASKER.userId(), 100L, new Title("一个长度足够的问题标题"),
+                    smuggled, Tags.of(List.of("java")), NOW)).isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void answerBodyOnlyNeedsTenChars() {
+            assertThat(MarkdownBody.ofAnswer("刚好十个字的回答内容").value()).hasSize(10);
+            assertThatThrownBy(() -> MarkdownBody.ofAnswer("只有九个字的回答")).isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void newQuestionStartsUnacceptedAndNotDeleted() {
+            Question q = persistedQuestion();
+
+            assertThat(q.acceptedAnswerId()).isNull();
+            assertThat(q.isAccepted(50)).isFalse();
+            assertThat(q.isDeleted()).isFalse();
+            assertThat(q.authorId()).isEqualTo(ASKER.userId());
+            assertThat(q.courseId()).isEqualTo(100L);
+            assertThat(q.answerCount()).isZero();
+            assertThat(q.createdAt()).isEqualTo(q.updatedAt());
+        }
     }
 
     @Nested
@@ -137,6 +183,46 @@ class QuestionTest {
             q.softDelete(ASKER, false, NOW);
             assertThatThrownBy(() -> Answer.submit(q, OTHER.userId(), MarkdownBody.ofAnswer("这是一个迟到了很久的回答内容"), NOW))
                     .isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void deletedQuestionRejectsEditAcceptAndSecondDelete() {
+            Question q = persistedQuestion();
+            Answer a = persistedAnswer(q, OTHER.userId(), 50);
+            q.softDelete(ASKER, false, NOW);
+            assertThat(q.isDeleted()).isTrue();
+            assertThat(q.deletedAt()).isEqualTo(NOW);
+
+            assertThatThrownBy(() -> q.edit(ASKER, false, q.title(), q.body(), q.tags(), NOW))
+                    .isInstanceOf(BusinessRuleException.class);
+            assertThatThrownBy(() -> q.accept(a, ASKER, false)).isInstanceOf(BusinessRuleException.class);
+            assertThatThrownBy(() -> q.softDelete(TEACHER, true, NOW)).isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void askerCanDeleteOwnQuestionWhileItHasNoAnswer() {
+            Question q = persistedQuestion();
+
+            q.softDelete(ASKER, false, NOW);
+
+            assertThat(q.isDeleted()).isTrue();
+        }
+
+        @Test
+        void strangersCannotDeleteEvenAnUnansweredQuestion() {
+            Question q = persistedQuestion();
+
+            assertThatThrownBy(() -> q.softDelete(OTHER, false, NOW)).isInstanceOf(ForbiddenException.class);
+
+            assertThat(q.isDeleted()).isFalse();
+        }
+
+        @Test
+        void editRejectsTooShortQuestionBody() {
+            Question q = persistedQuestion();
+
+            assertThatThrownBy(() -> q.edit(ASKER, false, q.title(), new MarkdownBody("这段正文只有十一个字符"),
+                    q.tags(), NOW)).isInstanceOf(BusinessRuleException.class);
         }
     }
 }

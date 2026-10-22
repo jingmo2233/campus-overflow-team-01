@@ -70,10 +70,16 @@ mvn -B test -pl co-bootstrap -am `
 
 ## 4. 数据库落库验证（截图用）
 
+> 容器里查询时加上 `--default-character-set=utf8mb4`，否则中文在 Windows 控制台显示成 `?`
+> （只是显示问题，不是存储问题）：
+> `docker exec co-mysql mysql -ucampus -pcampus_dev_pwd campus_overflow --default-character-set=utf8mb4 -e "..."`
+
 ```sql
--- 最近发布的问题
-SELECT id, title, tags, answer_count, created_at
-FROM qa_question ORDER BY id DESC LIMIT 1;
+-- 最近发布的问题（标签在 qa_question_tag 关联表里，qa_question 本身没有 tags 列）
+SELECT q.id, q.title, q.answer_count, q.created_at, GROUP_CONCAT(qt.tag) AS tags
+FROM qa_question q
+LEFT JOIN qa_question_tag qt ON qt.question_id = q.id
+GROUP BY q.id ORDER BY q.id DESC LIMIT 1;
 
 -- 对应的回答
 SELECT id, question_id, author_id, LEFT(body, 30) AS body, created_at

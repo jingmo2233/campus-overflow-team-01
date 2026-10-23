@@ -51,20 +51,33 @@ jobs:
   frontend:
     name: 前端构建
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+
+      # pnpm 必须在 setup-node 之前装好，否则 cache: pnpm 找不到包管理器
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # --frozen-lockfile：lockfile 与 package.json 不一致时直接失败，
+      # 保证 CI 装的版本与本地完全一致（npm install 会忽略这一点）
       - name: 安装依赖
-        working-directory: frontend
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
+
+      - name: 代码规范检查
+        run: pnpm lint
+
       - name: 类型检查
-        working-directory: frontend
-        run: npm run typecheck
+        run: pnpm typecheck
+
       - name: 构建
-        working-directory: frontend
-        run: npm run build
+        run: pnpm build
 
   images:
     name: 容器镜像构建

@@ -86,19 +86,24 @@ mvn -B test -pl co-bootstrap -am `
 > （只是显示问题，不是存储问题）：
 > `docker exec co-mysql mysql -ucampus -pcampus_dev_pwd campus_overflow --default-character-set=utf8mb4 -e "..."`
 
-```sql
--- 最近发布的问题（标签在 qa_question_tag 关联表里，qa_question 本身没有 tags 列）
-SELECT q.id, q.title, q.answer_count, q.created_at, GROUP_CONCAT(qt.tag) AS tags
-FROM qa_question q
-LEFT JOIN qa_question_tag qt ON qt.question_id = q.id
-GROUP BY q.id ORDER BY q.id DESC LIMIT 1;
+一条命令跑完两条查询 + utf8mb4 存储校验：
 
--- 对应的回答
-SELECT id, question_id, author_id, LEFT(body, 30) AS body, created_at
-FROM qa_answer ORDER BY id DESC LIMIT 1;
+```bash
+bash docs/lab4/verify-db.sh
 ```
 
-建议 Lab 4 提交的截图：`actuator/health` 返回 UP、Postman 1.1 的 201 响应、上面两条 SQL 的结果。
+**务必用 Git Bash 跑**。PowerShell 会把多行命令和 `\G` 拆坏，导致 mysql 收不到参数、
+转而打印一堆默认配置。脚本里已处理好引号与字符集。
+
+**建议提交的三张截图**：
+
+| # | 内容 | 怎么得到 |
+| --- | --- | --- |
+| 1 | `POST /api/v1/questions` 返回 **201** | `bash docs/lab4/verify.sh`，或 Postman 跑 `1.1` |
+| 2 | `/actuator/health` 返回 UP | 浏览器开 `http://localhost:8080/actuator/health`，**连地址栏一起截** |
+| 3 | 落库结果 | `bash docs/lab4/verify-db.sh` |
+
+第 1、3 张的问题 `id` 应当一致（同一次发布），两张互相印证。
 
 ## 5. 端到端实测记录（2026-10-22）
 

@@ -3,6 +3,7 @@ package com.campusoverflow.qa.domain;
 import com.campusoverflow.shared.domain.BusinessRuleException;
 import com.campusoverflow.shared.domain.Guard;
 import java.time.Instant;
+import java.util.Objects;
 
 /** 评论：挂在问题或回答下，支持一层“二级回复”。 */
 public class Comment {
@@ -28,10 +29,22 @@ public class Comment {
         this.createdAt = createdAt;
     }
 
+    public static final int MAX_LENGTH = 600;
+
     public static Comment post(TargetType targetType, long targetId, long questionId, long authorId, Comment parent,
                                String body, Instant now) {
-        // TODO(S2)：实现 Comment.post——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Comment.post 尚未实现");
+        String text = Guard.requireText(body, 1, MAX_LENGTH, "QA-1002", "评论");
+        Long parentId = null;
+        if (parent != null) {
+            if (parent.parentId != null) {
+                throw new BusinessRuleException("QA-1007", "评论回复只支持一层，不能再回复二级评论");
+            }
+            if (parent.targetType != targetType || parent.targetId != targetId) {
+                throw new BusinessRuleException("QA-1012", "回复必须与被回复的评论挂在同一内容下");
+            }
+            parentId = Objects.requireNonNull(parent.id, "被回复的评论尚未分配 ID");
+        }
+        return new Comment(null, targetType, targetId, questionId, authorId, parentId, text, now);
     }
 
     public static Comment reconstitute(Long id, TargetType targetType, long targetId, long questionId, long authorId,

@@ -1,0 +1,645 @@
+{
+  "info": {
+    "name": "CampusOverflow · Lab 4 验收集合（Q&A）",
+    "description": "Lab 4 交付物：POST /api/v1/questions 成功用例 + 回答/评论/投票/错误码回归。\n\n## 运行前置\n1. `docker compose -f deploy/docker-compose.yml up -d mysql redis`\n2. `cd backend && mvn spring-boot:run -pl co-bootstrap -Dspring-boot.run.profiles=dev`\n3. 本机 8080 可访问 /actuator/health\n\n## 运行顺序\n按文件夹编号 00 → 01 → 02 → 03 → 04 → 05 依次运行（Runner 里勾选整个 collection 也可以，但 03 会切换登录用户）。\n\n## 关于 CSRF\n后端是「服务端会话 + 双提交 Cookie」：任何写请求都要带 `X-XSRF-TOKEN`。\n本集合的 collection 级 pre-request 脚本会自动读取 `XSRF-TOKEN` Cookie 并塞进请求头；\n若某次写请求返回 403 `AUTH-403-CSRF`，先跑一次「0.1 获取 CSRF Token」再重试。\n\n## 变量\n- `baseUrl`：默认 http://localhost:8080\n- `studentUser` / `voterUser`：两个测试学号，重复注册会返回 409（脚本已容忍）\n- `questionId` / `answerId` / `commentId`：由前置请求自动写入，不要手动改",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// 双提交 CSRF：把服务端下发的 XSRF-TOKEN Cookie 同步到请求头",
+          "const token = pm.cookies.get('XSRF-TOKEN');",
+          "if (token) {",
+          "  pm.request.headers.upsert({ key: 'X-XSRF-TOKEN', value: decodeURIComponent(token) });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "studentUser", "value": "2023901" },
+    { "key": "studentPassword", "value": "Campus2026" },
+    { "key": "voterUser", "value": "2023902" },
+    { "key": "voterPassword", "value": "Campus2026" },
+    { "key": "questionId", "value": "" },
+    { "key": "answerId", "value": "" },
+    { "key": "commentId", "value": "" },
+    { "key": "questionTitle", "value": "Lab4 验收：红黑树插入后如何判断旋转方向？" }
+  ],
+  "item": [
+    {
+      "name": "00 · 认证（先跑）",
+      "item": [
+        {
+          "name": "0.1 获取 CSRF Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且返回 token', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "  pm.collectionVariables.set('csrfHeader', body.headerName);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/csrf",
+            "description": "获取 CSRF Token，同时服务端写入 XSRF-TOKEN Cookie。后续写请求依赖它。"
+          }
+        },
+        {
+          "name": "0.2 注册学生 A（201；已存在则 409）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 或 409（重复注册）', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{studentUser}}\",\n  \"displayName\": \"验收学生A\",\n  \"email\": \"{{studentUser}}@campus.edu.cn\",\n  \"password\": \"{{studentPassword}}\",\n  \"college\": \"计算机工程学院\",\n  \"className\": \"计科2301\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "description": "自助注册。学生注册后 verified=false，但账号是 ACTIVE，可以直接登录。"
+          }
+        },
+        {
+          "name": "0.3 登录学生 A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且拿到 id', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const me = pm.response.json();",
+                  "  pm.expect(me.id).to.be.a('number');",
+                  "  pm.collectionVariables.set('studentId', me.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{studentUser}}\",\n  \"password\": \"{{studentPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "登录成功后 Postman Cookie Jar 会保存 SESSION，后续请求自动携带。"
+          }
+        },
+        {
+          "name": "0.4 当前用户",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且是学生 A', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().username).to.eql(pm.collectionVariables.get('studentUser'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "验证会话已建立。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 · 问题（Lab 4 核心）",
+      "item": [
+        {
+          "name": "1.1 发布问题（POST /api/v1/questions）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('返回 questionId', function () {",
+                  "  const id = pm.response.json().id;",
+                  "  pm.expect(id).to.be.a('number');",
+                  "  pm.collectionVariables.set('questionId', id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"{{questionTitle}}\",\n  \"body\": \"红黑树插入新节点后，父节点为红且叔节点为黑时，为什么必须旋转而不能只靠变色？希望能给出一个具体的反例，并说明左旋与右旋的判定依据。\",\n  \"tags\": [\"数据结构\", \"红黑树\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/questions",
+            "description": "Lab 4 要求的成功用例。标题 ≥10 字、正文 ≥20 字、标签 1–5 个；不传 courseId 表示非课程问题。返回的 id 写入 {{questionId}}。"
+          }
+        },
+        {
+          "name": "1.2 问题列表",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且分页结构正确', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const page = pm.response.json();",
+                  "  pm.expect(page.items).to.be.an('array');",
+                  "  pm.expect(page.items.length).to.be.at.least(1);",
+                  "  pm.expect(page.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/questions?page=1&size=20",
+            "description": "公开接口，不需要登录。"
+          }
+        },
+        {
+          "name": "1.3 问题详情",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且标题与发布一致', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().title).to.eql(pm.collectionVariables.get('questionTitle'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionId}}",
+            "description": "详情包含回答、评论、我的投票与可执行操作（permissions）。"
+          }
+        },
+        {
+          "name": "1.4 编辑问题",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('204 No Content', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"{{questionTitle}}\",\n  \"body\": \"补充一下：想确认「叔红变色、叔黑旋转」这个口诀是否在所有插入场景都成立，尤其是 LR 与 RL 两种双旋的情况。\",\n  \"tags\": [\"数据结构\", \"红黑树\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/questions/{{questionId}}",
+            "description": "只有提问者或课程教师/助教可以编辑。"
+          }
+        },
+        {
+          "name": "1.5 热门标签",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且返回数组', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/tags/popular?limit=15",
+            "description": "标签热度由 TagRepository 维护，发布问题后应能看到「数据结构」「红黑树」。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · 回答与评论",
+      "item": [
+        {
+          "name": "2.1 提交回答",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 且返回 answerId', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const id = pm.response.json().id;",
+                  "  pm.expect(id).to.be.a('number');",
+                  "  pm.collectionVariables.set('answerId', id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"关键在于黑高这个不变量：变色只能在局部交换红黑属性，无法改变某条路径上的黑节点个数分布；叔节点为黑时只能通过旋转调整结构。\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/questions/{{questionId}}/answers",
+            "description": "回答正文 ≥10 字。提交后问题的 answerCount 由原子 UPDATE +1。"
+          }
+        },
+        {
+          "name": "2.2 评论回答",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 且返回 commentId', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const id = pm.response.json().id;",
+                  "  pm.expect(id).to.be.a('number');",
+                  "  pm.collectionVariables.set('commentId', id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"ANSWER\",\n  \"targetId\": {{answerId}},\n  \"body\": \"补一个动手方法：用 5、3、7、1、2 手工插入一遍，每步标出黑高。\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/comments",
+            "description": "评论可以挂在问题或回答下。"
+          }
+        },
+        {
+          "name": "2.3 二级回复（只允许一层）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"ANSWER\",\n  \"targetId\": {{answerId}},\n  \"parentId\": {{commentId}},\n  \"body\": \"这个办法对理解双旋确实直观，谢谢。\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/comments",
+            "description": "回复必须与被回复评论挂在同一内容下（否则 422 QA-1012）；不能回复二级评论（422 QA-1007）。"
+          }
+        },
+        {
+          "name": "2.4 详情校验回答与评论",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('回答数 ≥1 且包含刚提交的回答', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const detail = pm.response.json();",
+                  "  pm.expect(detail.answerCount).to.be.at.least(1);",
+                  "  pm.expect(detail.answers.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionId}}",
+            "description": "读模型（JdbcQaReadModel）聚合回答、评论与权限标记。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · 投票（切换到学生 B）",
+      "item": [
+        {
+          "name": "3.1 注册学生 B（201；已存在则 409）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 或 409', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{voterUser}}\",\n  \"displayName\": \"验收学生B\",\n  \"email\": \"{{voterUser}}@campus.edu.cn\",\n  \"password\": \"{{voterPassword}}\",\n  \"college\": \"计算机工程学院\",\n  \"className\": \"计科2302\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "description": "投票不能投给自己，所以需要第二个账号。"
+          }
+        },
+        {
+          "name": "3.2 登录学生 B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [ "pm.test('200', function () { pm.response.to.have.status(200); });" ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{voterUser}}\",\n  \"password\": \"{{voterPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "登录会覆盖 Cookie Jar 里的 SESSION，之后的请求以学生 B 身份发出。"
+          }
+        },
+        {
+          "name": "3.3 给学生 A 的问题 +1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且 delta = 1', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.myVote).to.eql(1);",
+                  "  pm.expect(r.scoreDelta).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/votes",
+            "description": "PUT 幂等：重复提交同一个值返回 delta = 0。"
+          }
+        },
+        {
+          "name": "3.4 改投 -1（delta = -2）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且 delta = -2', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.myVote).to.eql(-1);",
+                  "  pm.expect(r.scoreDelta).to.eql(-2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": -1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/votes",
+            "description": "改投按「新值 − 旧值」计算增量：1 → -1 即 -2，VoteCastEvent 携带新旧值供声誉幂等结算。"
+          }
+        },
+        {
+          "name": "3.5 撤销投票（delta = 1）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 且 delta = 1', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.myVote).to.eql(0);",
+                  "  pm.expect(r.scoreDelta).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/votes",
+            "description": "value = 0 表示撤销（删除投票记录）。"
+          }
+        },
+        {
+          "name": "3.6 切回学生 A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [ "pm.test('200', function () { pm.response.to.have.status(200); });" ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{studentUser}}\",\n  \"password\": \"{{studentPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "恢复后续负向用例所需的学生 A 会话。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · 负向用例（错误码回归）",
+      "item": [
+        {
+          "name": "4.1 标题过短 → 422 QA-1001",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 且 code = QA-1001', function () {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.json().code).to.eql('QA-1001');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"太短了\",\n  \"body\": \"正文长度是够的，用来验证标题下限 10 字会被领域层拒绝。\",\n  \"tags\": [\"java\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/questions",
+            "description": "GlobalExceptionHandler 把 BusinessRuleException 映射为 422 + code。"
+          }
+        },
+        {
+          "name": "4.2 给自己的问题投票 → 422 QA-1015",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 且 code = QA-1015', function () {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.json().code).to.eql('QA-1015');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/v1/votes",
+            "description": "自投票由 VoteService 与 Vote.cast 双重拦截。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · 清理（可选）",
+      "item": [
+        {
+          "name": "5.1 删除回答",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [ "pm.test('204', function () { pm.response.to.have.status(204); });" ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/answers/{{answerId}}",
+            "description": "软删除，同时 answerCount -1。"
+          }
+        },
+        {
+          "name": "5.2 删除问题",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [ "pm.test('204', function () { pm.response.to.have.status(204); });" ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionId}}",
+            "description": "提问者只能删除「尚无回答」的问题；5.1 先删回答后这里才返回 204。"
+          }
+        }
+      ]
+    }
+  ]
+}

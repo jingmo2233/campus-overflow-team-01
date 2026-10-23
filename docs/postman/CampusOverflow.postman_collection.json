@@ -10,25 +10,70 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// 双提交 CSRF：把服务端下发的 XSRF-TOKEN Cookie 同步到请求头",
-          "const token = pm.cookies.get('XSRF-TOKEN');",
-          "if (token) {",
-          "  pm.request.headers.upsert({ key: 'X-XSRF-TOKEN', value: decodeURIComponent(token) });",
-          "}"
+          "// 双提交 CSRF：请求头必须与随请求发出的 XSRF-TOKEN Cookie 一致。",
+          "// 注意：pm.cookies.get() 在 pre-request 阶段读不到 Cookie jar（恒为空），",
+          "// 必须用 pm.cookies.jar().get() 异步读取，否则所有写请求都会 403 AUTH-403-CSRF。",
+          "const header = pm.collectionVariables.get('csrfHeader') || 'X-XSRF-TOKEN';",
+          "",
+          "// 先用缓存值兜底（0.1 存下的），再用 jar 里的真实值覆盖",
+          "const cached = pm.collectionVariables.get('csrfToken');",
+          "if (cached) {",
+          "  pm.request.headers.upsert({ key: header, value: decodeURIComponent(cached) });",
+          "}",
+          "",
+          "const base = pm.collectionVariables.get('baseUrl') || 'http://localhost:8080';",
+          "pm.cookies.jar().get(base, 'XSRF-TOKEN', (err, value) => {",
+          "  if (!err && value) {",
+          "    pm.collectionVariables.set('csrfToken', value);",
+          "    pm.request.headers.upsert({ key: header, value: decodeURIComponent(value) });",
+          "  }",
+          "});"
         ]
       }
     }
   ],
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080" },
-    { "key": "studentUser", "value": "2023901" },
-    { "key": "studentPassword", "value": "Campus2026" },
-    { "key": "voterUser", "value": "2023902" },
-    { "key": "voterPassword", "value": "Campus2026" },
-    { "key": "questionId", "value": "" },
-    { "key": "answerId", "value": "" },
-    { "key": "commentId", "value": "" },
-    { "key": "questionTitle", "value": "Lab4 验收：红黑树插入后如何判断旋转方向？" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "studentUser",
+      "value": "2023901"
+    },
+    {
+      "key": "studentPassword",
+      "value": "Campus2026"
+    },
+    {
+      "key": "voterUser",
+      "value": "2023902"
+    },
+    {
+      "key": "voterPassword",
+      "value": "Campus2026"
+    },
+    {
+      "key": "questionId",
+      "value": ""
+    },
+    {
+      "key": "answerId",
+      "value": ""
+    },
+    {
+      "key": "commentId",
+      "value": ""
+    },
+    {
+      "key": "questionTitle",
+      "value": "Lab4 验收：红黑树插入后如何判断旋转方向？"
+    },
+    {
+      "key": "csrfToken",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -46,6 +91,8 @@
                   "  const body = pm.response.json();",
                   "  pm.expect(body.token).to.be.a('string').and.not.empty;",
                   "  pm.collectionVariables.set('csrfHeader', body.headerName);",
+                  "  // 存 token 本身，供集合级 pre-request 使用",
+                  "  pm.collectionVariables.set('csrfToken', body.token);",
                   "});"
                 ]
               }
@@ -74,11 +121,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{studentUser}}\",\n  \"displayName\": \"验收学生A\",\n  \"email\": \"{{studentUser}}@campus.edu.cn\",\n  \"password\": \"{{studentPassword}}\",\n  \"college\": \"计算机工程学院\",\n  \"className\": \"计科2301\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/auth/register",
             "description": "自助注册。学生注册后 verified=false，但账号是 ACTIVE，可以直接登录。"
@@ -103,11 +159,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{studentUser}}\",\n  \"password\": \"{{studentPassword}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/auth/login",
             "description": "登录成功后 Postman Cookie Jar 会保存 SESSION，后续请求自动携带。"
@@ -161,11 +226,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"{{questionTitle}}\",\n  \"body\": \"红黑树插入新节点后，父节点为红且叔节点为黑时，为什么必须旋转而不能只靠变色？希望能给出一个具体的反例，并说明左旋与右旋的判定依据。\",\n  \"tags\": [\"数据结构\", \"红黑树\"]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/questions",
             "description": "Lab 4 要求的成功用例。标题 ≥10 字、正文 ≥20 字、标签 1–5 个；不传 courseId 表示非课程问题。返回的 id 写入 {{questionId}}。"
@@ -234,11 +308,20 @@
           ],
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"{{questionTitle}}\",\n  \"body\": \"补充一下：想确认「叔红变色、叔黑旋转」这个口诀是否在所有插入场景都成立，尤其是 LR 与 RL 两种双旋的情况。\",\n  \"tags\": [\"数据结构\", \"红黑树\"]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/questions/{{questionId}}",
             "description": "只有提问者或课程教师/助教可以编辑。"
@@ -290,11 +373,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"body\": \"关键在于黑高这个不变量：变色只能在局部交换红黑属性，无法改变某条路径上的黑节点个数分布；叔节点为黑时只能通过旋转调整结构。\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/questions/{{questionId}}/answers",
             "description": "回答正文 ≥10 字。提交后问题的 answerCount 由原子 UPDATE +1。"
@@ -319,11 +411,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"targetType\": \"ANSWER\",\n  \"targetId\": {{answerId}},\n  \"body\": \"补一个动手方法：用 5、3、7、1、2 手工插入一遍，每步标出黑高。\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/comments",
             "description": "评论可以挂在问题或回答下。"
@@ -345,11 +446,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"targetType\": \"ANSWER\",\n  \"targetId\": {{answerId}},\n  \"parentId\": {{commentId}},\n  \"body\": \"这个办法对理解双旋确实直观，谢谢。\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/comments",
             "description": "回复必须与被回复评论挂在同一内容下（否则 422 QA-1012）；不能回复二级评论（422 QA-1007）。"
@@ -400,11 +510,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{voterUser}}\",\n  \"displayName\": \"验收学生B\",\n  \"email\": \"{{voterUser}}@campus.edu.cn\",\n  \"password\": \"{{voterPassword}}\",\n  \"college\": \"计算机工程学院\",\n  \"className\": \"计科2302\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/auth/register",
             "description": "投票不能投给自己，所以需要第二个账号。"
@@ -416,17 +535,28 @@
             {
               "listen": "test",
               "script": {
-                "exec": [ "pm.test('200', function () { pm.response.to.have.status(200); });" ]
+                "exec": [
+                  "pm.test('200', function () { pm.response.to.have.status(200); });"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{voterUser}}\",\n  \"password\": \"{{voterPassword}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/auth/login",
             "description": "登录会覆盖 Cookie Jar 里的 SESSION，之后的请求以学生 B 身份发出。"
@@ -451,11 +581,20 @@
           ],
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": 1\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/votes",
             "description": "PUT 幂等：重复提交同一个值返回 delta = 0。"
@@ -480,11 +619,20 @@
           ],
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": -1\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/votes",
             "description": "改投按「新值 − 旧值」计算增量：1 → -1 即 -2，VoteCastEvent 携带新旧值供声誉幂等结算。"
@@ -509,11 +657,20 @@
           ],
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": 0\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/votes",
             "description": "value = 0 表示撤销（删除投票记录）。"
@@ -525,17 +682,28 @@
             {
               "listen": "test",
               "script": {
-                "exec": [ "pm.test('200', function () { pm.response.to.have.status(200); });" ]
+                "exec": [
+                  "pm.test('200', function () { pm.response.to.have.status(200); });"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{studentUser}}\",\n  \"password\": \"{{studentPassword}}\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/auth/login",
             "description": "恢复后续负向用例所需的学生 A 会话。"
@@ -563,11 +731,20 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"太短了\",\n  \"body\": \"正文长度是够的，用来验证标题下限 10 字会被领域层拒绝。\",\n  \"tags\": [\"java\"]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/questions",
             "description": "GlobalExceptionHandler 把 BusinessRuleException 映射为 422 + code。"
@@ -590,11 +767,20 @@
           ],
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"targetType\": \"QUESTION\",\n  \"targetId\": {{questionId}},\n  \"value\": 1\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": "{{baseUrl}}/api/v1/votes",
             "description": "自投票由 VoteService 与 Vote.cast 双重拦截。"
@@ -611,7 +797,9 @@
             {
               "listen": "test",
               "script": {
-                "exec": [ "pm.test('204', function () { pm.response.to.have.status(204); });" ]
+                "exec": [
+                  "pm.test('204', function () { pm.response.to.have.status(204); });"
+                ]
               }
             }
           ],
@@ -628,7 +816,9 @@
             {
               "listen": "test",
               "script": {
-                "exec": [ "pm.test('204', function () { pm.response.to.have.status(204); });" ]
+                "exec": [
+                  "pm.test('204', function () { pm.response.to.have.status(204); });"
+                ]
               }
             }
           ],

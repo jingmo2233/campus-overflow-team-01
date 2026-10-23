@@ -67,8 +67,9 @@ mvn -B test -pl co-bootstrap -am `
 
 **关键设计**
 
-- 写请求的 CSRF：集合级 pre-request 脚本读取 `XSRF-TOKEN` Cookie 并写入 `X-XSRF-TOKEN` 请求头；
-  若返回 `403 AUTH-403-CSRF`，先单独跑一次「0.1 获取 CSRF Token」。
+- 写请求的 CSRF：`0.1` 把响应体里的 token 存进集合变量 `csrfToken`，集合级 pre-request 再把它写入
+  `X-XSRF-TOKEN` 请求头。**不要改成 `pm.cookies.get()`** —— 它在 pre-request 阶段读不到 Cookie jar，
+  会让所有写请求 403（这是本集合早期版本的真实缺陷）。
 - 投票不能投给自己，所以 `03` 会注册并登录第二个学生（学生 B），跑完再切回学生 A。
 - `questionId` / `answerId` / `commentId` 由前置请求自动写入变量，不要手工填写。
 
@@ -117,17 +118,18 @@ FROM qa_answer ORDER BY id DESC LIMIT 1;
 | 落库 | `SELECT ... FROM qa_question` | 1 行；`CHAR_LENGTH=17 / LENGTH=51`，`HEX(LEFT(title,2))=E7BAA2E9BB91`（「红黑」），utf8mb4 存储无误 |
 | 前端 | `pnpm dev` | 首页 **200**；经 Vite `/api` 代理取到后端数据，同源下 Cookie 与 CSRF 正常 |
 
-**命令行自测脚本**（Git Bash；中文必须写进文件再 `--data-binary` 提交，直接用 `-d` 会因控制台编码被后端判为 `400 Failed to read request`）：
+**命令行自测脚本**：[`docs/lab4/verify.sh`](verify.sh)，一条命令跑完 `0.1 → 0.2 → 0.3 → 1.1`：
 
 ```bash
-curl -s -c cj.txt http://localhost:8080/api/v1/auth/csrf -o /dev/null
-TOKEN=$(grep XSRF-TOKEN cj.txt | awk '{print $7}')
-
-printf '%s' '{"title":"...（10–150 字）","body":"...（≥20 字）","tags":["数据结构"]}' > ask.json
-curl -s -b cj.txt -c cj.txt -X POST http://localhost:8080/api/v1/questions \
-  -H "Content-Type: application/json; charset=UTF-8" -H "X-XSRF-TOKEN: $TOKEN" \
-  --data-binary @ask.json -w "\nHTTP %{http_code}\n"
+bash docs/lab4/verify.sh
 ```
+
+输出已排版，可直接截图作为交付证据（最后一段就是指定用例的请求头、请求体与 `HTTP/1.1 201`）。
+不想装 Postman、或 Postman 的 Cookie/脚本出问题时，用它即可 —— 验收看的是
+`POST /api/v1/questions` 返回 201 这个事实，不限定工具。
+
+> 中文必须写进文件再用 `--data-binary` 提交。Git Bash 下用 `-d` 直接传中文会因控制台编码
+> 被后端判为 `400 Failed to read request`，脚本里已经处理好。
 
 > 启动后每隔一段时间日志会出现一次 `UnsupportedOperationException: TODO(S3)：BountyService.expireDue 尚未实现`。
 > 这是 S3 的定时任务（Dev-C 范围），**不影响 Q&A 链路**，S3 完成后自然消失。
@@ -187,7 +189,7 @@ Connector/J 建连时直接抛异常。已修正为 `UTF-8`（服务端 utf8mb4 
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
-| `403 AUTH-403-CSRF` | 没带 `X-XSRF-TOKEN`，或登录后 token 轮换。先跑「0.1 获取 CSRF Token」再重试 |
+| `403 AUTH-403-CSRF` | 没带 `X-XSRF-TOKEN`。**必须先跑「0.1 获取 CSRF Token」**，它会把 token 存进集合变量 `csrfToken`，后续写请求由集合级 pre-request 自动带上。实测登录不会轮换该 token |
 | `401 AUTH-401` | 未登录或会话过期（30 分钟）。重跑登录请求 |
 | `422 QA-1001` | 标题不在 10–150 字（用 `code` 判断，不要匹配提示文案） |
 | `422 QA-1005` | 标签数量不在 1–5 个 |

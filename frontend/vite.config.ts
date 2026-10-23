@@ -11,6 +11,21 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    // antd 整包约 900 KB（gzip 290 KB）是已知且可接受的体量，调高阈值避免每次构建都刷警告。
+    // 真要再降只能按需引入或路由级懒加载，S2 阶段收益不大。
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        // antd 体积大且很少变动，单独成块后业务代码更新不会让用户重下整个依赖
+        manualChunks: {
+          antd: ['antd', '@ant-design/icons'],
+          react: ['react', 'react-dom', 'react-router-dom'],
+          query: ['@tanstack/react-query'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

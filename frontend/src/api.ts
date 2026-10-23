@@ -26,13 +26,7 @@ interface ProblemDetails {
   detail?: string;
 }
 
-/**
- * 把未知异常转成可展示的文案。
- * 注意：业务分支一律用 `ApiError.code` 判断，不要匹配这里返回的提示文案（团队章程 4.3）。
- */
-export function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : '请求失败';
-}
+// 面向用户的错误文案见 @/errors 的 describeError()：按业务码翻译，不在这一层拼文案。
 
 function cookie(name: string): string | undefined {
   return document.cookie

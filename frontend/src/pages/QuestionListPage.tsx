@@ -1,9 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { errorText } from '@/api';
+import { Alert, Button, Card, Checkbox, Empty, Input, List, Select, Space, Statistic, Tag } from 'antd';
+import { CheckCircleTwoTone, EditOutlined } from '@ant-design/icons';
 import { useAuth } from '@/auth';
+import { describeError } from '@/errors';
 import { useDebounced } from '@/hooks/useDebounced';
 import { usePopularTags, useQuestionList } from '@/query/hooks';
+
+const SORTS = [
+  { value: 'newest', label: '最新' },
+  { value: 'active', label: '最近活跃' },
+  { value: 'hot', label: '得分最高' },
+  { value: 'relevance', label: '相关度' },
+];
 
 export function QuestionListPage() {
   const { me } = useAuth();
@@ -23,82 +32,94 @@ export function QuestionListPage() {
 
   return (
     <div className="layout">
-      <section>
-        <div className="toolbar">
-          <input
-            placeholder="搜索问题（支持中文全文检索）"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="newest">最新</option>
-            <option value="active">最近活跃</option>
-            <option value="hot">得分最高</option>
-            <option value="relevance">相关度</option>
-          </select>
-          <label className="check">
-            <input type="checkbox" checked={unanswered} onChange={(e) => setUnanswered(e.target.checked)} />
-            仅看未回答
-          </label>
-          {me && (
-            <Link className="primary" to="/ask">
-              我要提问
-            </Link>
-          )}
-        </div>
+      <section className="layout-main">
+        <Card size="small" className="toolbar-card">
+          <Space wrap>
+            <Input.Search
+              allowClear
+              placeholder="搜索问题（支持中文全文检索）"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              style={{ width: 280 }}
+            />
+            <Select value={sort} onChange={setSort} options={SORTS} style={{ width: 140 }} />
+            <Checkbox checked={unanswered} onChange={(e) => setUnanswered(e.target.checked)}>
+              仅看未回答
+            </Checkbox>
+            {me && (
+              <Link to="/ask">
+                <Button type="primary" icon={<EditOutlined />}>
+                  我要提问
+                </Button>
+              </Link>
+            )}
+          </Space>
+        </Card>
 
         {activeTag && (
-          <p className="muted">
-            标签筛选：<b>{activeTag}</b> <button onClick={() => setActiveTag(undefined)}>清除</button>
-          </p>
+          <Space className="filter-bar">
+            <span>标签筛选：</span>
+            <Tag closable color="blue" onClose={() => setActiveTag(undefined)}>
+              {activeTag}
+            </Tag>
+          </Space>
         )}
-        {error && <p className="error">{errorText(error)}</p>}
 
-        <ul className="qlist">
-          {data?.items.map((q) => (
-            <li key={q.id}>
-              <div className="stats">
-                <span>
-                  <b>{q.score}</b> 票
-                </span>
-                <span className={q.accepted ? 'accepted' : ''}>
-                  <b>{q.answerCount}</b> 回答
-                </span>
-                <span>{q.viewCount} 浏览</span>
+        {error && <Alert type="error" showIcon message={describeError(error)} className="page-alert" />}
+
+        <List
+          loading={isPending}
+          dataSource={data?.items ?? []}
+          locale={{ emptyText: <Empty description="没有匹配的问题，换个关键词试试" /> }}
+          renderItem={(q) => (
+            <List.Item key={q.id} className="qitem">
+              <div className="qstats">
+                <Statistic title="票数" value={q.score} />
+                <Statistic
+                  title="回答"
+                  value={q.answerCount}
+                  prefix={q.accepted ? <CheckCircleTwoTone twoToneColor="#52c41a" /> : null}
+                />
+                <Statistic title="浏览" value={q.viewCount} />
               </div>
-              <div className="qmain">
-                <Link className="qtitle" to={`/questions/${q.id}`}>
-                  {q.title}
-                </Link>
-                <p className="excerpt">{q.excerpt}</p>
-                <div className="tagrow">
-                  {q.tags.map((t) => (
-                    <button key={t} className="tag" onClick={() => setActiveTag(t)}>
-                      {t}
-                    </button>
-                  ))}
-                  <span className="muted">
-                    {q.author.displayName} · {new Date(q.createdAt).toLocaleString('zh-CN')}
-                  </span>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {isPending && <p className="muted">加载中…</p>}
-        {data && data.items.length === 0 && <p className="muted">没有匹配的问题，换个关键词试试。</p>}
+              <List.Item.Meta
+                title={
+                  <Link className="qtitle" to={`/questions/${q.id}`}>
+                    {q.title}
+                  </Link>
+                }
+                description={
+                  <>
+                    <p className="excerpt">{q.excerpt}</p>
+                    <Space wrap size={[4, 4]}>
+                      {q.tags.map((t) => (
+                        <Tag key={t} color="blue" className="clickable" onClick={() => setActiveTag(t)}>
+                          {t}
+                        </Tag>
+                      ))}
+                      <span className="meta">
+                        {q.author.displayName} · {new Date(q.createdAt).toLocaleString('zh-CN')}
+                      </span>
+                    </Space>
+                  </>
+                }
+              />
+            </List.Item>
+          )}
+        />
       </section>
 
-      <aside>
-        <h3>热门标签</h3>
-        <div className="tagrow">
-          {tags.map((t) => (
-            <button key={t.name} className="tag" onClick={() => setActiveTag(t.name)}>
-              {t.name}
-              <span className="count">{t.questionCount}</span>
-            </button>
-          ))}
-        </div>
+      <aside className="layout-side">
+        <Card title="热门标签" size="small">
+          <Space wrap size={[4, 8]}>
+            {tags.map((t) => (
+              <Tag key={t.name} className="clickable" onClick={() => setActiveTag(t.name)}>
+                {t.name} <span className="count">{t.questionCount}</span>
+              </Tag>
+            ))}
+            {tags.length === 0 && <span className="meta">暂无标签</span>}
+          </Space>
+        </Card>
       </aside>
     </div>
   );

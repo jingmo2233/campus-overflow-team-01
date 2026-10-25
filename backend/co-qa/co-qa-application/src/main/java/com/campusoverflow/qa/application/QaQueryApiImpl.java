@@ -17,9 +17,14 @@ public class QaQueryApiImpl implements QaQueryApi {
         this.questions = questions;
     }
 
+    /**
+     * 已软删除的问题仍然返回，但带上 {@code deleted = true}。下游（Reputation 对账、Discovery 索引清理）
+     * 需要据此做补偿——直接返回空会让它们无法区分「问题不存在」与「问题已删除」。
+     */
     @Override
     public Optional<QuestionRef> findQuestion(long questionId) {
-        // TODO(S2)：实现 QaQueryApiImpl.findQuestion——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：QaQueryApiImpl.findQuestion 尚未实现");
+        return questions.findById(questionId)
+                .map(q -> new QuestionRef(q.id(), q.authorId(), q.courseId(), q.title().value(),
+                        q.acceptedAnswerId(), q.isDeleted()));
     }
 }

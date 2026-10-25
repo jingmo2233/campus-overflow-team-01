@@ -1,0 +1,77 @@
+name: Bug（缺陷）
+description: 行为与预期不符
+title: "[BUG] "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        缺陷必须能复现才能修。请按指导书 V2 第 7.4 节填写：
+        复现步骤、期望结果、实际结果、错误码或日志。
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从干净环境开始，逐步写清。附上用到的账号角色与数据。
+      placeholder: |
+        1. 以学生 A（2023901）登录
+        2. 打开问题 #5 详情页
+        3. 点击自己问题的「赞同」
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      placeholder: 提示「不能给自己的内容投票」，得分不变
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      placeholder: 页面无反应，控制台报 500
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 错误码 / 日志 / 截图
+      description: 后端请贴业务码与异常栈，前端请贴控制台输出或网络请求。
+      render: text
+
+  - type: input
+    id: introduced
+    attributes:
+      label: 引入它的 PR（若可追溯）
+      description: 用 `git bisect` 或提交历史定位到的 PR 编号
+      placeholder: "#17"
+
+  - type: dropdown
+    id: context
+    attributes:
+      label: 所属上下文
+      options:
+        - identity
+        - qa
+        - reputation
+        - discovery
+        - frontend
+        - infra
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重程度
+      options:
+        - P0（阻断：主流程不可用、数据错误）
+        - P1（严重：功能缺失但有绕过方式）
+        - P2（一般：体验问题）
+    validations:
+      required: true

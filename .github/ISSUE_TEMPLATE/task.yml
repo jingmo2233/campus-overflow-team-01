@@ -1,0 +1,60 @@
+name: Task（开发任务）
+description: Story 下的具体技术任务，或独立的工程/文档工作
+title: "[TX-XX] "
+labels: ["type:task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Task 是一次可独立提 PR 的工作。建议控制在一天以内；
+        更大的拆成多个，或升级为 Story。
+
+  - type: input
+    id: parent
+    attributes:
+      label: 所属 Story
+      description: 填 Issue 编号，如 `#23`。独立任务可留空。
+      placeholder: "#23"
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 要做什么
+      description: 改哪些文件 / 类 / 方法，达成什么效果
+      placeholder: |
+        实现 Question.accept：
+        顺序为 未删除 → 有权限 → 未采纳过 → 答案属于本题 → 答案未删除
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 完成标准
+      description: 怎样算做完？哪个测试转绿？
+      placeholder: |
+        - QuestionTest.Accepting 全绿
+        - 错误码符合 docs/错误码.md
+        - 新增边界用例：重复采纳、采纳已删除回答
+    validations:
+      required: true
+
+  - type: dropdown
+    id: context
+    attributes:
+      label: 所属上下文
+      options:
+        - identity
+        - qa
+        - reputation
+        - discovery
+        - frontend
+        - infra
+    validations:
+      required: true
+
+  - type: input
+    id: estimate
+    attributes:
+      label: 预估工时（小时）
+      placeholder: "4"

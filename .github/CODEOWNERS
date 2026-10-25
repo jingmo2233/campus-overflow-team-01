@@ -1,0 +1,30 @@
+# 按上下文自动指派第一评审人（指导书 V2 第 7.5.1 节）。
+# 规则自上而下匹配，后匹配者覆盖前者，所以通配规则放最前面。
+#
+# ⚠️ 待确认：下面只填入了已确认的 GitHub 账号。
+#   已确认：@jingmo2233（PO，角色 B）、@xy1897（角色 A）、@yttt697、@fxs0917
+#   角色 C / D / E 分别对应谁尚未确定，暂以 PO 兜底，确认后替换对应行。
+#   每条路径至少保留一名有效 owner，否则 GitHub 不会自动请求评审。
+
+# 默认：任何未被下方规则覆盖的改动，由 PO 兜底
+*                           @jingmo2233
+
+# —— 后端：按限界上下文 ——
+/backend/co-qa/             @xy1897 @jingmo2233
+/backend/co-identity/       @xy1897
+/backend/co-reputation/     @jingmo2233 @yttt697
+/backend/co-discovery/      @yttt697 @fxs0917
+
+# 共享内核影响所有上下文，要求两人评审
+/backend/co-shared-kernel/  @xy1897 @jingmo2233
+
+# —— 前端 ——
+/frontend/                  @xy1897 @fxs0917
+
+# —— 工程基础设施：CI、部署脚本、协作模板 ——
+/.github/                   @jingmo2233 @xy1897
+/deploy/                    @jingmo2233
+
+# —— 文档：错误码与 ADR 是团队契约，改动需 PO 过目 ——
+/docs/错误码.md             @xy1897 @jingmo2233
+/docs/adr/                  @jingmo2233

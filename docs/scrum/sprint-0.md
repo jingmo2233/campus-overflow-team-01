@@ -21,9 +21,9 @@
 | T0-04 | 渐进式 CI 门禁 + ADR | E | ✅ | PR #29；`docs/adr/010-渐进式质量门禁.md` |
 | T0-05 | 8 条 ADR + Identity 精读 → 架构理解笔记 | 全员 | ✅ | `docs/notes/architecture.md` |
 | T0-06 | 事件风暴 → 上下文映射、事件目录、术语表 | 全员 | ✅ | `docs/ddd/` |
-| T0-07 | 48 个 PBI 导入、Planning Poker、DoR/DoD | PO / B | 🟡 部分 | Issue #30～#77；`docs/team-agreement.md`；看板字段待 PO |
+| T0-07 | 48 个 PBI 导入、Planning Poker、DoR/DoD | PO / B | ✅ Issue；🟡 看板 | Issue #30～#77；`docs/backlog/product-backlog-v2.md`；看板字段待 PO |
 | T0-08 | `http/auth.http` 冒烟脚本 | C | ✅ | `http/auth.http` |
-| T0-09 | 前端课程页：列表、我的课程、加入课程 | D | 🟡 进行中 | `frontend/src/pages/CoursePage.tsx` |
+| T0-09 | 前端课程页：列表、我的课程、加入课程 | D | ✅ | `frontend/src/pages/CoursePage.tsx`；PR #79 |
 | T0-10 | `docs/team.md` + 破冰 PR（每人 1 次评审） | 全员 | 🟡 部分 | `docs/team.md`；PR #28（@xy1897）；其他成员待补 |
 | T0-11 | 教师/管理员测试账号说明写入 README | E | ✅ | README 第 9.2 节 |
 
@@ -87,7 +87,7 @@
 | --- | --- | --- | --- |
 | 创建 Projects 看板并把 48 个 PBI 加入，配置 Story Points/Sprint 字段 | @jingmo2233 | 10-28 | #30 |
 | 快进 develop 到 main，配置 develop 保护与状态检查 | @jingmo2233 | 10-28 | #30 |
-| 为 PR #29 找非作者 Approve 并合并，打 v0.1.0 | @xy1897 | 10-28 | #29 |
+| 为 PR #29 / #78 / #79 找非作者 Approve 并合并，打 v0.1.0 | @xy1897 | 10-28 | #29 / #78 / #79 |
 | 补环境验证截图与破冰 PR（陈阳、fxs0917） | @yttt697 @fxs0917 | 10-29 | #31 / 待建 |
 | S1 计划会确认行走骨架范围与技术债 Issue | @xy1897 | S1 第 1 天 | PB-18 |
 
@@ -101,6 +101,8 @@
 - [x] `http/auth.http`
 - [x] `docs/sprint0/environment.md`
 - [x] README 开发者须知
-- [ ] 前端课程页（进行中）
+- [x] 前端课程页（PR #79）
+- [x] `docs/sprint0/po-checklist.md`（PO 收尾操作）
+- [x] `docs/releases/v0.1.0.md`（Release Notes 草稿）
 - [ ] Projects 看板（PO）
 - [ ] v0.1.0 标签（待 PR 合并）

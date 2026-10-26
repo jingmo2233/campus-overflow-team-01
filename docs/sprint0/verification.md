@@ -128,5 +128,16 @@ cd frontend && npm install && npm run dev
 - [x] Swagger UI 200
 - [x] 注册 201、登录 200、建课 201、加入 204、我的课程 200
 - [x] 前端 typecheck/build 通过
-- [ ] 课程页截图（待补，放 `docs/sprint0/screenshots/`）
+- [x] 课程页截图：`screenshots/course-page.png`
+- [x] Swagger UI 截图：`screenshots/swagger-ui.png`
 - [ ] 其他成员环境验证（待补 `docs/sprint0/environment.md` 表格）
+
+## 6. 截图
+
+课程页（匿名浏览；登录后显示“加入课程”按钮与角色徽标）：
+
+![课程页](screenshots/course-page.png)
+
+Swagger UI（`/swagger-ui/index.html`，Question / Vote 等分组可见）：
+
+![Swagger UI](screenshots/swagger-ui.png)

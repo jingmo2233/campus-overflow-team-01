@@ -1,12 +1,18 @@
 export type Role = 'STUDENT' | 'TA' | 'TEACHER' | 'ADMIN';
+export type CourseRole = 'STUDENT' | 'TA' | 'TEACHER';
 
 export interface Author { id: number; displayName: string; role: string; verified: boolean }
 export interface Page<T> { items: T[]; total: number; page: number; size: number }
 
+export interface Course {
+  id: number; code: string; name: string; term: string;
+  teacherId: number; teacherName: string; myRole?: CourseRole | null;
+}
+
 export interface Me {
   id: number; username: string; displayName: string; email: string; role: Role;
   verified: boolean; college?: string; className?: string;
-  courses: { id: number; code: string; name: string; term: string; teacherName: string }[];
+  courses: Course[];
 }
 
 export interface QuestionSummary {

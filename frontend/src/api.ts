@@ -1,5 +1,5 @@
 import type {
-  LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
+  Course, LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
 } from './types';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
@@ -46,6 +46,11 @@ export const api = {
   login: (username: string, password: string) => request<Me>('POST', '/v1/auth/login', { username, password }),
   logout: () => request<void>('POST', '/v1/auth/logout'),
   me: () => get<Me>('/v1/auth/me'),
+
+  // 课程（Identity 上下文）：列表带 myRole，未登录时 myRole 为 null
+  courses: () => get<Course[]>('/v1/courses'),
+  myCourses: () => get<Course[]>('/v1/courses/mine'),
+  joinCourse: (courseId: number) => request<void>('POST', `/v1/courses/${courseId}/join`, {}),
 
   questions: (page = 1, courseId?: number) =>
     get<Page<QuestionSummary>>(`/v1/questions?page=${page}${courseId ? `&courseId=${courseId}` : ''}`),

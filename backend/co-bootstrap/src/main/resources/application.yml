@@ -5,7 +5,10 @@ spring:
   profiles:
     default: dev
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:campus_overflow}?useUnicode=true&characterEncoding=utf8mb4&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&rewriteBatchedStatements=true
+    # characterEncoding 取的是 Java 字符集名，必须写 UTF-8；写成 MySQL 的 utf8mb4
+    # 会在建连时抛 UnsupportedEncodingException。服务端 utf8mb4 由 compose 启动参数
+    # 与建表 DDL 保证，Connector/J 会把 UTF-8 映射到 utf8mb4。
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:campus_overflow}?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&rewriteBatchedStatements=true
     username: ${DB_USER:campus}
     password: ${DB_PASSWORD:campus_dev_pwd}
     hikari:

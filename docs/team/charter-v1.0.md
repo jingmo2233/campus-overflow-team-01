@@ -29,5 +29,5 @@
 - [ ] 相关文档/ADR 已更新
 
 ## 全员签名
-- PO：魏国超 (jingmo2233)
+- PO：韦国超 (jingmo2233)
 - Developer：xy1897

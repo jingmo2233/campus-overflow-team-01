@@ -1,0 +1,116 @@
+### Sprint 0 接口冒烟脚本：CSRF → 注册 → 登录 → 我 → 课程 → 加入课程
+### IntelliJ IDEA：打开本文件，点击每个请求左侧的 ▶ 运行；Cookie 由 HTTP Client 自动保存。
+### 说明：Spring Security 使用 Cookie + CSRF 双提交，所有写请求必须带 X-XSRF-TOKEN。
+
+@baseUrl = http://localhost:8080/api/v1
+@username = stu2026001
+@password = Campus2026
+@displayName = 测试学生
+@email = stu2026001@example.edu
+@courseId = 1
+
+### 1. 获取 CSRF Token（同时写入 XSRF-TOKEN Cookie）
+GET {{baseUrl}}/auth/csrf
+
+> {%
+    client.global.set("xsrf", response.body.token);
+    client.test("csrf 200", function () {
+        client.assert(response.status === 200, "expected 200");
+        client.assert(response.body.token.length > 0, "empty token");
+    });
+%}
+
+### 2. 注册学生（密码 8–64 位，必须同时含字母与数字）
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrf}}
+
+{
+  "username": "{{username}}",
+  "displayName": "{{displayName}}",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "college": "计算机学院",
+  "className": "软工 2026-1 班"
+}
+
+> {%
+    client.test("注册 201 或 409（已存在）", function () {
+        client.assert([201, 409].indexOf(response.status) >= 0, "unexpected status " + response.status);
+    });
+    if (response.status === 201) {
+        client.global.set("userId", response.body.id);
+    }
+%}
+
+### 3. 登录（成功后会话 Cookie 自动保存；会话 ID 会轮换）
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrf}}
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+> {%
+    client.test("登录 200", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+    });
+    client.global.set("userId", response.body.id);
+    client.global.set("username", response.body.username);
+%}
+
+### 4. 当前登录用户
+GET {{baseUrl}}/auth/me
+
+> {%
+    client.test("me 200", function () {
+        client.assert(response.status === 200, "expected 200");
+        client.assert(response.body.username === client.global.get("username"), "username mismatch");
+    });
+%}
+
+### 5. 课程列表（登录时每项带 myRole；未登录时 myRole 为 null）
+GET {{baseUrl}}/courses
+
+> {%
+    client.test("课程列表 200", function () {
+        client.assert(response.status === 200, "expected 200");
+    });
+%}
+
+### 6. 我加入的课程
+GET {{baseUrl}}/courses/mine
+
+### 7. 加入课程（需要登录；重复加入返回 409）
+POST {{baseUrl}}/courses/{{courseId}}/join
+X-XSRF-TOKEN: {{xsrf}}
+
+> {%
+    client.test("加入课程 204 或 409（已加入）", function () {
+        client.assert([204, 409].indexOf(response.status) >= 0, "unexpected status " + response.status);
+    });
+%}
+
+### 8. 加入后再查我的课程
+GET {{baseUrl}}/courses/mine
+
+### ---------------------------------------------------------------------------
+### 教师/管理员准备（开发期）：先注册，再用 SQL 提升角色，然后【退出重新登录】
+### 会话里缓存了 Actor，改角色后不重登不生效。
+###
+### docker exec -i co-mysql mysql -ucampus -pcampus_dev_pwd campus_overflow <<'SQL'
+### UPDATE id_user SET role = 'TEACHER', verified = TRUE WHERE username = 'T2001';
+### UPDATE id_user SET role = 'ADMIN',   verified = TRUE WHERE username = 'admin01';
+### SQL
+###
+### 教师建课（把 {{username}} 换成教师账号，重新登录后再运行）：
+### POST {{baseUrl}}/courses
+### {
+###   "code": "SE2026",
+###   "name": "软件工程",
+###   "term": "2026-2027-1"
+### }
+### 返回 { "id": 1 }，把上面的 @courseId 改为 1。
+### ---------------------------------------------------------------------------

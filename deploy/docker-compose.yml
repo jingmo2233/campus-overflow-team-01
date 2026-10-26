@@ -17,7 +17,9 @@ services:
       MYSQL_DATABASE: campus_overflow
       MYSQL_USER: campus
       MYSQL_PASSWORD: ${DB_PASSWORD:-campus_dev_pwd}
-    ports: ["3306:3306"]
+    # 本机若已有 MySQL 占用 3306，可在 .env 或命令行设置 DB_HOST_PORT=3307，
+    # 同时用 DB_PORT=3307 启动后端（application.yml 读取同名环境变量）。
+    ports: ["${DB_HOST_PORT:-3306}:3306"]
     volumes: ["mysql-data:/var/lib/mysql"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-root_dev_pwd}"]

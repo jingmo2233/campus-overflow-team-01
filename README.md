@@ -48,26 +48,29 @@ cd ../frontend && npm install && npm run dev      # http://localhost:5173
 **允许你们增加方法、增加类、增加测试**，但**不要修改已有测试的断言**——那相当于改需求；
 如果你确信某条测试与文档矛盾，在 PR 里说明并与教师确认。
 
-## 4. Sprint 与任务对应
+## 4. Sprint 与任务对应（指导书 V2，8 周）
+
+> 起始代码 README 原按 15 周规划；现按《实验指导书 V2》压缩为 8 周、5 个 Sprint。
+> 完整 Backlog 见 [`docs/backlog/product-backlog-v2.md`](docs/backlog/product-backlog-v2.md)，每个 PBI 对应一个 Issue。
 
 | Sprint | 周次 | 目标 | 对应任务 |
 | --- | --- | --- | --- |
-| S0 | 1–2 | 跑通环境、读懂 Identity 参考实现与架构文档 | 无编码任务；提交环境验证截图与架构理解笔记 |
-| S1 | 3–6 | 身份与课程：读懂并**扩展** Identity（如选课审批、个人资料） | 在 Identity 上下文中自行设计增量需求 |
-| S2 | 7–10 | 问答核心：Q&A 上下文全部 TODO | `docs/学生任务清单.md` 中标记 **S2** 的 36 个方法 |
-| S3 | 11–13 | 声誉与发现：Reputation + Discovery 上下文全部 TODO | 标记 **S3** 的 71 个方法 |
-| S4 | 14–15 | 打磨：性能、可观测性、前端体验、演示准备 | 第 6 节的增强任务 + 压测与指标 |
+| S0 | 第 1 周 | 团队、仓库、环境、CI 与 Backlog 就绪；能注册/登录/加入课程 | T0-01～11；v0.1.0 |
+| S1 | 第 2–3 周 | 提问 → 回答 → 投票 → 评论 → 采纳 的完整闭环 | PB-06～19；Q&A 36 个方法 |
+| S2 | 第 4–5 周 | 问答行为异步、幂等地转化为声誉、徽章、悬赏与排行榜 | PB-20～30；Reputation 39 个方法 |
+| S3 | 第 6–7 周 | 搜索、相关推荐、通知、@提及，端到端链路全绿 | PB-31～39；Discovery 32 个方法 |
+| S4 | 第 8 周 | 稳定化、体验打磨、可观测，v1.0 发布与答辩 | PB-40～47（按容量） |
 
 ## 5. 验收门槛（对应课程考核）
 
 | 项目 | 要求 | 如何自检 |
 | --- | --- | --- |
-| 单元测试 | 全部通过 | `mvn test` |
-| 领域层覆盖率 | ≥ 70%（把 `backend/pom.xml` 中的 `domain.coverage.minimum` 从 `0` 改成 `0.70` 后仍能通过） | `mvn verify` |
-| 架构约束 | ArchUnit 全部通过（领域层零框架依赖、跨上下文只经 api、无环、实体表名前缀） | `mvn test -pl co-bootstrap -Dtest=ArchitectureTest` |
-| 集成测试 | 端到端链路通过 | `mvn verify`（需要 Docker） |
+| 单元测试 | 当前 Sprint 范围全绿（ADR-010 渐进式门禁） | `mvn test -pl "$SPRINT_MODULES" -am` |
+| 领域层覆盖率 | S1 起 `co-qa-domain` ≥70%，S2 加 Reputation，S3 全量 ≥70% | `mvn verify` |
+| 架构约束 | ArchUnit FF-1～FF-8 全部通过 | `mvn test -pl co-bootstrap -am -Dtest=ArchitectureTest -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false` |
+| 集成测试 | S3 起必须绿；S0～S2 允许失败 | `mvn verify`（需要 Docker） |
 | 前端 | 类型检查与构建通过 | `cd frontend && npm run typecheck && npm run build` |
-| 流水线 | GitHub Actions 全绿 | 推送后看 Actions 页 |
+| 流水线 | GitHub Actions 全绿；S0 范围见 ADR-010 | 推送后看 Actions 页 |
 
 **不要为了让测试通过而删测试或放宽断言**——CI 的历史记录会保留每一次改动，这属于学术诚信范畴。
 
@@ -81,11 +84,13 @@ cd ../frontend && npm install && npm run dev      # http://localhost:5173
 - 通知红点的实时刷新（当前是 30 秒轮询，可改 SSE）；
 - 移动端适配与可访问性（键盘操作、对比度）。
 
-## 7. 你必须先读的三份材料
+## 7. 你必须先读的材料
 
-1. `docs/adr/`：8 条架构决策记录——**为什么**这样设计比代码本身更重要；
+1. `docs/adr/`：10 条架构决策记录——**为什么**这样设计比代码本身更重要；
 2. 《CampusOverflow 软件架构设计文档（arc42）》：第 5 章构建块视图、第 6 章运行时视图、第 10 章质量场景；
-3. `docs/错误码.md`：错误码分段与 HTTP 状态映射，实现领域异常时必须遵守。
+3. `docs/错误码.md`：错误码分段与 HTTP 状态映射，实现领域异常时必须遵守；
+4. `docs/ddd/`：上下文映射、领域事件、聚合清单、统一语言（Sprint 0 事件风暴产出）；
+5. `docs/notes/architecture.md`：架构理解笔记与评审会自测题。
 
 ## 8. 常见坑
 
@@ -95,4 +100,60 @@ cd ../frontend && npm install && npm run dev      # http://localhost:5173
 | 声誉不变化 | 声誉是异步结算的：事件先落 `outbox_event`，由中继投递；检查 `last_error` 字段 |
 | 中文搜索没结果 | 必须用 compose 里的 MySQL（已配置 `ngram_token_size=2`），自建库请对照参数 |
 | 事件重复导致加分两次 | 消费端必须幂等：账本唯一键 `(event_id, user_id, reason)` 或 `processed_event` 表 |
-| 提交后 CI 红 | 先本地跑 `mvn verify`，再推送；不要把红的分支合并到 `main` |
+| 提交后 CI 红 | 先本地跑对应范围的 `mvn test`，再推送；不要把红的分支合并到 `main` |
+| 本机 3306 被占用 | 用 `DB_HOST_PORT=3307` 起 MySQL 容器，后端加 `DB_PORT=3307` |
+
+## 9. 开发者须知（Sprint 0）
+
+### 9.1 Profile 与端口
+
+| profile | 用途 | 注意 |
+| --- | --- | --- |
+| `dev`（默认） | 本地开发，连 `localhost:3306`（或 `DB_PORT`）的 MySQL/Redis | **不要加 `demo`**：`DemoDataSeeder` 依赖尚未实现的悬赏等业务 |
+| `prod` | 容器部署 | 必须注入 `CO_FIELD_KEY`；`SPRING_PROFILES=prod` |
+| `demo` | S3 完成后加载演示数据 | S3 之前启动会抛 `UnsupportedOperationException` |
+
+- 后端：`http://localhost:8080`；Swagger：`/swagger-ui.html`；健康检查：`/actuator/health`
+- 前端：`http://localhost:5173`，Vite 把 `/api` 代理到 8080
+- 冒烟脚本：`http/auth.http`（CSRF → 注册 → 登录 → 我 → 课程 → 加入课程）
+
+### 9.2 教师 / 管理员测试账号（Sprint 1～2 开发期）
+
+`DemoDataSeeder` 在 S2 结束前不可用。开发期先正常注册账号，再用 SQL 提升角色；**改完必须退出重新登录**（会话缓存了 Actor）：
+
+```sql
+-- docker exec -it co-mysql mysql -ucampus -pcampus_dev_pwd campus_overflow
+UPDATE id_user SET role = 'TEACHER', verified = TRUE WHERE username = 'T2001';
+UPDATE id_user SET role = 'ADMIN',   verified = TRUE WHERE username = 'admin01';
+```
+
+教师建课后，学生调用 `POST /api/v1/courses/{id}/join` 加入；教师可通过
+`PUT /api/v1/courses/{id}/members/{userId}` 任命助教（role: `TA`）。
+
+### 9.3 CI 与质量门禁
+
+- CI 使用**渐进式门禁**（ADR-010）：S0 范围 = `co-shared-kernel` + Identity domain + Q&A domain/application；
+  每个 Sprint 计划会后由质量与 DevOps 负责人更新 `SPRINT_MODULES`，S3 恢复全量。
+- **红线**：只能缩小运行范围，不能用 `-Dmaven.test.failure.ignore`、`@Disabled`、删测试或改断言让 CI 变绿。
+- 覆盖率：`co-qa-domain` 自 S1 起 ≥0.70；S3 根 POM 统一 ≥0.70。
+
+### 9.4 文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| `docs/team.md` | 成员、角色、代码所有权 |
+| `docs/team-agreement.md` | 分支/提交/PR 规则、DoR/DoD、评审与学术诚信 |
+| `docs/ddd/` | 上下文映射、领域事件、聚合与不变量、统一语言 |
+| `docs/notes/architecture.md` | 架构理解笔记、ADR 讲解分工、评审自测题 |
+| `docs/sprint0/environment.md` | 环境版本矩阵与实测记录 |
+| `docs/sprint0/verification.md` | 注册→登录→加入课程端到端证据 |
+| `docs/adr/` | 001～010 架构决策记录 |
+| `docs/backlog/product-backlog-v2.md` | 48 个 PBI 与 Issue 对照 |
+| `docs/scrum/sprint-0.md` | Sprint 0 计划、站会、评审与回顾 |
+
+### 9.5 当前状态（2026-10-26）
+
+- Sprint 0 收尾中；目标标签 `v0.1.0`。
+- main 受保护：至少 1 名非作者 Approve + CI 绿。
+- `develop` 落后于 `main`：本 Sprint 收尾时由 PO 快进并开启保护。
+

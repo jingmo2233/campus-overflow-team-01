@@ -7,3 +7,4 @@ dist/
 *.iml
 .DS_Store
 .env
+*.tsbuildinfo

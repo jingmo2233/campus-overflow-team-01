@@ -1,5 +1,8 @@
 # Product Backlog v1.0
 
+> **已由 [product-backlog-v2.md](product-backlog-v2.md) 取代（指导书 V2，48 个 PBI）。**
+> 本文件保留作为 Lab 1/Lab 2 的历史记录，不再作为 Sprint 排期依据。
+
 | 故事ID | 用户故事描述 | 优先级 | Story Point | 状态 |
 | :--- | :--- | :--- | :--- | :--- |
 | US-001 | 作为访客，我想要使用学号注册登录，以便于参与社区。 | P0 | 5 | Sprint 1 |

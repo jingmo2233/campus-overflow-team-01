@@ -13,13 +13,28 @@ public final class RelatedQuestionPolicy {
     }
 
     public static double jaccard(int shared, int sizeA, int sizeB) {
-        // TODO(S3)：实现 RelatedQuestionPolicy.jaccard——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：RelatedQuestionPolicy.jaccard 尚未实现");
+        int union = sizeA + sizeB - shared;
+        if (shared <= 0 || union <= 0) {
+            return 0d;
+        }
+        return (double) shared / union;
     }
 
     public static List<SearchIndex.RelatedCandidate> rank(List<SearchIndex.RelatedCandidate> candidates, int ownTagCount,
                                                           int limit) {
-        // TODO(S3)：实现 RelatedQuestionPolicy.rank——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：RelatedQuestionPolicy.rank 尚未实现");
+        if (candidates == null || candidates.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        return candidates.stream()
+                .filter(candidate -> candidate.sharedTags() > 0)
+                .sorted(Comparator
+                        .comparingDouble((SearchIndex.RelatedCandidate candidate) ->
+                                jaccard(candidate.sharedTags(), ownTagCount, candidate.tagCount()))
+                        .reversed()
+                        .thenComparing(Comparator.comparingInt(SearchIndex.RelatedCandidate::score).reversed())
+                        .thenComparing(candidate -> !candidate.accepted())
+                        .thenComparingLong(SearchIndex.RelatedCandidate::questionId))
+                .limit(limit)
+                .toList();
     }
 }

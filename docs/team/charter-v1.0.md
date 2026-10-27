@@ -29,5 +29,8 @@
 - [ ] 相关文档/ADR 已更新
 
 ## 全员签名
-- PO：韦国超 (jingmo2233)
-- Developer：xy1897
+- PO：韦国超 (组长)
+- Developer：宾艺涵
+  Developer：陈阳
+- Developer：张博
+- sm：冯先顺

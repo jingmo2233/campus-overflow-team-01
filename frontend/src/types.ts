@@ -1,12 +1,20 @@
 export type Role = 'STUDENT' | 'TA' | 'TEACHER' | 'ADMIN';
+/** 课程内角色，对应后端 CourseRole 枚举。 */
+export type CourseRole = 'STUDENT' | 'TA' | 'TEACHER';
 
 export interface Author { id: number; displayName: string; role: string; verified: boolean }
 export interface Page<T> { items: T[]; total: number; page: number; size: number }
 
+/** 对应后端 CourseView。未登录时 myRole 为 null，已加入时为课程内角色。 */
+export interface Course {
+  id: number; code: string; name: string; term: string;
+  teacherId: number; teacherName: string; myRole?: CourseRole | null;
+}
+
 export interface Me {
   id: number; username: string; displayName: string; email: string; role: Role;
   verified: boolean; college?: string; className?: string;
-  courses: { id: number; code: string; name: string; term: string; teacherName: string }[];
+  courses: Course[];
 }
 
 export interface QuestionSummary {

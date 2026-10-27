@@ -1,0 +1,114 @@
+# 生产部署专用（独立于开发用 docker-compose.yml，不要两份一起用）
+# 启动：bash deploy/deploy.sh（推荐，自带健康检查与失败排查）
+# 手动：cd deploy && docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+name: campus-overflow-prod
+
+services:
+  mysql:
+    image: mysql:8.0.39
+    container_name: co-mysql-prod
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --ngram-token-size=2               # 中文全文检索（ADR-005）
+      - --innodb-ft-enable-stopword=0
+      - --default-time-zone=+00:00         # 全库统一 UTC
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?必须在 deploy/.env 中设置}
+      MYSQL_DATABASE: campus_overflow
+      MYSQL_USER: campus
+      MYSQL_PASSWORD: ${DB_PASSWORD:?必须在 deploy/.env 中设置}
+    # 生产不向宿主机暴露 3306，仅容器网络内可达；需要排查时用 docker exec 进入
+    expose: ["3306"]
+    volumes: ["mysql-prod-data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: &default-logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  redis:
+    image: redis:7-alpine
+    container_name: co-redis-prod
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    expose: ["6379"]
+    volumes: ["redis-prod-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    image: campus-overflow/backend:latest
+    container_name: co-backend-prod
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES:-prod}   # 生产绝不含 demo
+      DB_HOST: mysql
+      DB_USER: campus
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      CO_FIELD_KEY: ${CO_FIELD_KEY:?必须在 deploy/.env 中设置}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TZ: UTC
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    expose: ["8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources:
+        limits: { memory: 1g }
+    logging: *default-logging
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    image: campus-overflow/web:latest
+    container_name: co-web-prod
+    restart: unless-stopped
+    depends_on:
+      backend: { condition: service_healthy }
+    ports: ["${WEB_PORT:-80}:80"]
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: co-prometheus-prod
+    restart: unless-stopped
+    profiles: ["observability"]
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["127.0.0.1:9090:9090"]   # 只绑定本机，通过 SSH 隧道访问
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: co-grafana-prod
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?必须在 deploy/.env 中设置}
+    depends_on: [prometheus]
+    ports: ["127.0.0.1:3000:3000"]   # 只绑定本机，通过 SSH 隧道访问
+    volumes: ["grafana-prod-data:/var/lib/grafana"]
+    logging: *default-logging
+
+volumes:
+  mysql-prod-data:
+  redis-prod-data:
+  grafana-prod-data:

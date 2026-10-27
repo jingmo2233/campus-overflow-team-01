@@ -15,7 +15,14 @@ public final class MentionParser {
     }
 
     public static Set<String> extract(String text) {
-        // TODO(S3)：实现 MentionParser.extract——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：MentionParser.extract 尚未实现");
+        if (text == null || text.isBlank()) {
+            return Set.of();
+        }
+        Set<String> mentions = new LinkedHashSet<>();
+        Matcher matcher = MENTION.matcher(text);
+        while (mentions.size() < MAX_MENTIONS && matcher.find()) {
+            mentions.add(matcher.group(1));
+        }
+        return mentions;
     }
 }

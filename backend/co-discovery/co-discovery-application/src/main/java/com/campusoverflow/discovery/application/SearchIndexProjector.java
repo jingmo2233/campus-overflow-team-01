@@ -35,70 +35,97 @@ public class SearchIndexProjector {
     }
 
     private boolean firstTime(IntegrationEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.firstTime——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.firstTime 尚未实现");
+        return processed.markProcessed(e.eventId(), CONSUMER);
     }
 
     @EventListener
     @Transactional
     public void on(QuestionPostedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.insert(new SearchDocument(e.questionId(), e.courseId(), e.authorId(), e.title(), e.plainText(),
+                e.tags(), e.occurredAt()));
     }
 
     @EventListener
     @Transactional
     public void on(QuestionEditedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.updateText(e.questionId(), e.title(), e.plainText(), e.tags(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(AnswerSubmittedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.adjustAnswerCount(e.questionId(), 1, e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(ContentDeletedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        if ("QUESTION".equals(e.targetType())) {
+            index.markDeleted(e.questionId());
+        } else {
+            // 删回答只减计数，问题本身仍在索引里
+            index.adjustAnswerCount(e.questionId(), -1, e.occurredAt());
+        }
     }
 
     @EventListener
     @Transactional
     public void on(AnswerAcceptedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.markAccepted(e.questionId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(VoteCastEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        // 投影存的是问题维度总分，回答的票同样计入；撤销与改投都能由差值正确表达
+        int delta = e.newValue() - e.oldValue();
+        if (delta != 0) {
+            index.adjustScore(e.questionId(), delta);
+        }
     }
 
     @EventListener
     @Transactional
     public void on(BountyOpenedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.setBountyOpen(e.questionId(), true);
     }
 
     @EventListener
     @Transactional
     public void on(BountyAwardedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.setBountyOpen(e.questionId(), false);
     }
 
     @EventListener
     @Transactional
     public void on(BountyClosedEvent e) {
-        // TODO(S3)：实现 SearchIndexProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：SearchIndexProjector.on 尚未实现");
+        if (!firstTime(e)) {
+            return;
+        }
+        index.setBountyOpen(e.questionId(), false);
     }
 }

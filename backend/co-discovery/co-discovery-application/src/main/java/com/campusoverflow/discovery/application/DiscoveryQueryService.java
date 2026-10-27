@@ -18,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class DiscoveryQueryService {
 
+    /** 拉取候选池后再在内存里按 Jaccard 精确排序，避免把排序规则下推到 SQL 适配器。 */
+    private static final int CANDIDATE_POOL = 50;
+
     private final SearchPort search;
     private final SearchIndex index;
     private final IdentityApi identity;
@@ -29,12 +32,37 @@ public class DiscoveryQueryService {
     }
 
     public PageResult<SearchResultView> search(SearchQuery query) {
-        // TODO(S3)：实现 DiscoveryQueryService.search——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：DiscoveryQueryService.search 尚未实现");
+        PageResult<SearchHit> hits = search.search(query);
+        Map<Long, UserSummary> authors = hits.items().isEmpty()
+                ? Map.of()
+                : identity.findUsers(hits.items().stream().map(SearchHit::authorId).distinct().toList());
+        return hits.map(hit -> toView(hit, authors.get(hit.authorId())));
     }
 
     public List<RelatedQuestionView> related(long questionId, int limit) {
-        // TODO(S3)：实现 DiscoveryQueryService.related——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：DiscoveryQueryService.related 尚未实现");
+        if (limit <= 0) {
+            return List.of();
+        }
+        List<String> tags = index.findTags(questionId);
+        if (tags.isEmpty()) {
+            return List.of();
+        }
+        List<SearchIndex.RelatedCandidate> candidates =
+                index.findCandidatesSharingTags(questionId, tags, CANDIDATE_POOL);
+        int ownTagCount = tags.size();
+        return RelatedQuestionPolicy.rank(candidates, ownTagCount, limit).stream()
+                .map(candidate -> new RelatedQuestionView(candidate.questionId(), candidate.title(),
+                        candidate.answerCount(), candidate.accepted(),
+                        RelatedQuestionPolicy.jaccard(candidate.sharedTags(), ownTagCount, candidate.tagCount())))
+                .toList();
+    }
+
+    private static SearchResultView toView(SearchHit hit, UserSummary author) {
+        SearchResultView.Author view = author == null
+                ? new SearchResultView.Author(hit.authorId(), "已注销用户", null, false)
+                : new SearchResultView.Author(author.id(), author.displayName(), author.role().name(),
+                        author.verified());
+        return new SearchResultView(hit.questionId(), hit.title(), hit.snippet(), hit.tags(), hit.courseId(),
+                view, hit.score(), hit.answerCount(), hit.accepted(), hit.bountyOpen(), hit.createdAt());
     }
 }

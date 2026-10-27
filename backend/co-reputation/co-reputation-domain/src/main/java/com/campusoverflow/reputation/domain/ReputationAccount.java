@@ -22,9 +22,15 @@ public class ReputationAccount {
         this.version = version;
     }
 
+    /**
+     * 开户：声誉从 0 起算，按角色发放初始悬赏积分（见 INV-R5，只在此处写入一次）。
+     * 初始积分为 0 是合法的（学生），负数不是。
+     */
     public static ReputationAccount open(long userId, int initialPoints) {
-        // TODO(S3)：实现 ReputationAccount.open——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.open 尚未实现");
+        if (initialPoints < 0) {
+            throw new BusinessRuleException("REP-1006", "初始积分不能为负");
+        }
+        return new ReputationAccount(userId, 0, initialPoints, 0, 0L);
     }
 
     public static ReputationAccount reconstitute(long userId, int reputation, int availablePoints, int frozenPoints,
@@ -34,35 +40,49 @@ public class ReputationAccount {
 
     /** 只允许通过账本流水改变声誉（由应用服务保证先写流水）。 */
     public void applyReputation(int delta) {
-        // TODO(S3)：实现 ReputationAccount.applyReputation——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.applyReputation 尚未实现");
+        this.reputation += delta;
     }
 
+    /** 发布悬赏时冻结积分：可用减少、冻结增加，总量不变（INV-R3 / INV-B3）。 */
     public void freezePoints(int points) {
-        // TODO(S3)：实现 ReputationAccount.freezePoints——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.freezePoints 尚未实现");
+        requirePositive(points);
+        if (availablePoints < points) {
+            throw new BusinessRuleException("REP-1002", "可用悬赏积分不足");
+        }
+        this.availablePoints -= points;
+        this.frozenPoints += points;
     }
 
-    /** 悬赏成功发放：冻结积分转出给获奖者（以声誉形式），发起人账户中消失。 */
+    /**
+     * 悬赏成功发放：冻结积分直接从冻结池转出，发起人账户中消失（INV-B6）。
+     * 注意不可写成「先解冻再扣减」——那样在并发下会出现负余额。
+     */
     public void spendFrozen(int points) {
-        // TODO(S3)：实现 ReputationAccount.spendFrozen——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.spendFrozen 尚未实现");
+        requirePositive(points);
+        ensureFrozen(points);
+        this.frozenPoints -= points;
     }
 
     /** 悬赏到期：冻结积分退回可用。 */
     public void refundFrozen(int points) {
-        // TODO(S3)：实现 ReputationAccount.refundFrozen——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.refundFrozen 尚未实现");
+        requirePositive(points);
+        ensureFrozen(points);
+        this.frozenPoints -= points;
+        this.availablePoints += points;
     }
 
+    /** 冻结池余额校验：动用的积分不能超过已冻结的数量。 */
     private void ensureFrozen(int points) {
-        // TODO(S3)：实现 ReputationAccount.ensureFrozen——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.ensureFrozen 尚未实现");
+        if (frozenPoints < points) {
+            throw new BusinessRuleException("REP-1002", "冻结积分不足，无法完成该操作");
+        }
     }
 
+    /** 冻结、支出、退回的数量必须为正数，避免用负数绕过校验反向改余额。 */
     private static void requirePositive(int points) {
-        // TODO(S3)：实现 ReputationAccount.requirePositive——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReputationAccount.requirePositive 尚未实现");
+        if (points <= 0) {
+            throw new BusinessRuleException("REP-1006", "积分数量必须为正数");
+        }
     }
 
     public long userId() { return userId; }

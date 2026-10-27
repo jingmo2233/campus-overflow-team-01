@@ -8,6 +8,7 @@ import { AskPage } from './pages/AskPage';
 import { LoginPage } from './pages/LoginPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { CoursePage } from './pages/CoursePage';
 
 function Header() {
   const { me, logout } = useAuth();
@@ -27,6 +28,7 @@ function Header() {
       <Link className="brand" to="/">CampusOverflow</Link>
       <nav>
         <Link to="/">问题</Link>
+        <Link to="/courses">课程</Link>
         <Link to="/leaderboard">排行榜</Link>
         {me && <Link to="/notifications">通知{unread > 0 && <span className="badge">{unread}</span>}</Link>}
       </nav>
@@ -59,6 +61,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<QuestionListPage />} />
             <Route path="/questions/:id" element={<QuestionDetailPage />} />
+            <Route path="/courses" element={<CoursePage />} />
             <Route path="/ask" element={<RequireAuth><AskPage /></RequireAuth>} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />

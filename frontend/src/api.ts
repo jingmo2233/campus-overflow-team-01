@@ -1,5 +1,6 @@
 import type {
-  LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
+  Course, LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile,
+  SearchResult,
 } from './types';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
@@ -8,6 +9,9 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+/** 网络层失败（断网、DNS、CORS、后端未启动）统一成这个码，组件里不必再判断原生 TypeError。 */
+export const NETWORK_ERROR_CODE = 'SYS-NETWORK';
 
 function cookie(name: string): string | undefined {
   return document.cookie.split('; ').find((c) => c.startsWith(`${name}=`))?.split('=')[1];
@@ -25,15 +29,33 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     }
     if (token) headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
   }
-  const res = await fetch(`/api${path}`, {
-    method, headers, credentials: 'include',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method, headers, credentials: 'include',
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    // fetch 只在网络层失败时 reject，抛出的 TypeError 文案是英文且各浏览器不一致，
+    // 直接显示给用户没有意义，统一成中文提示。
+    throw new ApiError(0, NETWORK_ERROR_CODE, '网络连接失败，请检查网络后重试');
+  }
+
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  let data: { code?: string; detail?: string } | undefined;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    // 网关超时等场景会返回 HTML 错误页，此时保留状态码，给出可读提示
+    throw new ApiError(res.status, 'SYS-000', `服务暂时不可用（HTTP ${res.status}）`);
+  }
   if (!res.ok) {
-    throw new ApiError(res.status, data?.code ?? 'SYS-000', data?.detail ?? '请求失败');
+    // 5xx 通常是网关或后端未就绪，Problem Details 里的 detail 未必有值，
+    // 兜底文案要说清「是服务端的问题」，而不是让用户以为是自己操作错了。
+    const fallback = res.status >= 500 ? '服务暂时不可用，请稍后重试' : '请求失败，请稍后重试';
+    throw new ApiError(res.status, data?.code ?? 'SYS-000', data?.detail ?? fallback);
   }
   return data as T;
 }
@@ -46,6 +68,11 @@ export const api = {
   login: (username: string, password: string) => request<Me>('POST', '/v1/auth/login', { username, password }),
   logout: () => request<void>('POST', '/v1/auth/logout'),
   me: () => get<Me>('/v1/auth/me'),
+
+  // 课程（Identity 上下文）：列表对未登录开放，此时 myRole 为 null
+  courses: () => get<Course[]>('/v1/courses'),
+  myCourses: () => get<Course[]>('/v1/courses/mine'),
+  joinCourse: (courseId: number) => request<void>('POST', `/v1/courses/${courseId}/join`, {}),
 
   questions: (page = 1, courseId?: number) =>
     get<Page<QuestionSummary>>(`/v1/questions?page=${page}${courseId ? `&courseId=${courseId}` : ''}`),

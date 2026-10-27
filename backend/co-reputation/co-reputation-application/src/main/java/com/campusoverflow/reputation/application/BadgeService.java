@@ -7,6 +7,7 @@ import com.campusoverflow.reputation.domain.BadgeType;
 import com.campusoverflow.shared.event.EventIds;
 import com.campusoverflow.shared.event.IntegrationEventPublisher;
 import java.time.Clock;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +26,17 @@ public class BadgeService {
         this.clock = clock;
     }
 
+    /**
+     * 授予徽章。存在性检查放在最前面，因此「提交第一个回答」「重复认证同一回答」这类
+     * 会被反复触发的事件，重复调用不会重复发徽章、也不会重复发事件。
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public void grant(long userId, BadgeType type) {
-        // TODO(S3)：实现 BadgeService.grant——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：BadgeService.grant 尚未实现");
+        if (badges.has(userId, type)) {
+            return;
+        }
+        Instant now = clock.instant();
+        badges.award(new BadgeAward(userId, type, now));
+        events.publish(new BadgeAwardedEvent(EventIds.next(), now, userId, type.name(), type.displayName()));
     }
 }

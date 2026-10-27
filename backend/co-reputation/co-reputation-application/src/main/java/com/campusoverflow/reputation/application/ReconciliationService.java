@@ -24,9 +24,22 @@ public class ReconciliationService {
         this.ledger = ledger;
     }
 
+    /**
+     * 全量比对账户声誉与流水汇总。返回空列表即账实相符。
+     * 只有账户没有流水时按 0 比对（正常的新开户就是这个状态）；
+     * 只有流水没有账户的情况无法在这里发现，因为不知道该拿哪个账户去比 —— 由账户表反向缺失检查覆盖。
+     */
     @Transactional(readOnly = true)
     public List<Mismatch> reconcile() {
-        // TODO(S3)：实现 ReconciliationService.reconcile——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReconciliationService.reconcile 尚未实现");
+        Map<Long, Long> sums = ledger.sumByUser();
+        List<ReputationAccount> all = accounts.findAll();
+        List<Mismatch> mismatches = new ArrayList<>();
+        for (ReputationAccount account : all) {
+            long sum = sums.getOrDefault(account.userId(), 0L);
+            if (sum != account.reputation()) {
+                mismatches.add(new Mismatch(account.userId(), account.reputation(), sum));
+            }
+        }
+        return mismatches;
     }
 }

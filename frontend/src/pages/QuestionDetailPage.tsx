@@ -207,7 +207,7 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
 
 /** 编辑问题：课程归属不允许在前端改，这里只提交标题 / 正文 / 标签。 */
 function EditQuestionForm({ question, onDone }: { question: QuestionDetail; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(question.title);
   const [body, setBody] = useState(question.body);
   const [tags, setTags] = useState(question.tags.join(' '));
@@ -215,16 +215,21 @@ function EditQuestionForm({ question, onDone }: { question: QuestionDetail; onDo
   const [error, setError] = useState('');
 
   const save = async () => {
+    // 后端对标题有 @NotBlank + 150 字上限，这里先拦，省一次往返
+    if (!title.trim() || !body.trim()) {
+      setError('标题和正文都不能为空');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       await api.editQuestion(question.id, {
         courseId: question.course?.id,
-        title,
+        title: title.trim(),
         body,
         tags: tags.split(/[,，\s]+/).filter(Boolean),
       });
-      setOpen(false);
+      setEditing(false);
       onDone();
     } catch (e) {
       setError(errorMessage(e, '保存失败'));
@@ -233,7 +238,7 @@ function EditQuestionForm({ question, onDone }: { question: QuestionDetail; onDo
     }
   };
 
-  if (!open) return <button onClick={() => setOpen(true)}>编辑问题</button>;
+  if (!editing) return <button onClick={() => setEditing(true)}>编辑问题</button>;
 
   return (
     <div className="edit-form">
@@ -249,7 +254,7 @@ function EditQuestionForm({ question, onDone }: { question: QuestionDetail; onDo
       {error && <p className="error" role="alert">{error}</p>}
       <div className="actions">
         <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '保存'}</button>
-        <button onClick={() => { setOpen(false); setError(''); }}>取消</button>
+        <button onClick={() => { setEditing(false); setError(''); }}>取消</button>
       </div>
     </div>
   );
@@ -257,7 +262,7 @@ function EditQuestionForm({ question, onDone }: { question: QuestionDetail; onDo
 
 /** 编辑回答：正文与问题共用 MarkdownBody 的长度约束，前端只做空值拦截。 */
 function EditAnswerForm({ answer, onDone }: { answer: Answer; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(answer.body);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -272,7 +277,7 @@ function EditAnswerForm({ answer, onDone }: { answer: Answer; onDone: () => void
     try {
       // 用正文覆盖原内容：AnswerView 只回渲染后的 bodyHtml，编辑必须以原始 Markdown 为起点
       await api.editAnswer(answer.id, body);
-      setOpen(false);
+      setEditing(false);
       onDone();
     } catch (e) {
       setError(errorMessage(e, '保存失败'));
@@ -281,7 +286,7 @@ function EditAnswerForm({ answer, onDone }: { answer: Answer; onDone: () => void
     }
   };
 
-  if (!open) return <button onClick={() => setOpen(true)}>编辑回答</button>;
+  if (!editing) return <button onClick={() => setEditing(true)}>编辑回答</button>;
 
   return (
     <div className="edit-form">
@@ -291,7 +296,7 @@ function EditAnswerForm({ answer, onDone }: { answer: Answer; onDone: () => void
       {error && <p className="error" role="alert">{error}</p>}
       <div className="actions">
         <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '保存'}</button>
-        <button onClick={() => { setOpen(false); setError(''); }}>取消</button>
+        <button onClick={() => { setEditing(false); setError(''); }}>取消</button>
       </div>
     </div>
   );

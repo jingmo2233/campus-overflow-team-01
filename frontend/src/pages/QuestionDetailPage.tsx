@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
-import type { QuestionDetail } from '../types';
+import type { Answer, QuestionDetail } from '../types';
 
 export function QuestionDetailPage() {
   const { id } = useParams();
   const questionId = Number(id);
   const { me } = useAuth();
+  const navigate = useNavigate();
   const [q, setQ] = useState<QuestionDetail | null>(null);
   const [related, setRelated] = useState<{ id: number; title: string }[]>([]);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(() => {
-    api.question(questionId).then(setQ).catch((e) => setError(e.message));
+    api.question(questionId).then(setQ).catch((e) => setError(errorMessage(e, '问题加载失败')));
   }, [questionId]);
 
   useEffect(() => {
@@ -22,11 +24,28 @@ export function QuestionDetailPage() {
     api.related(questionId).then(setRelated).catch(() => undefined);
   }, [load, questionId]);
 
-  const act = (fn: () => Promise<unknown>) => fn().then(load).catch((e) => setError(e.message));
+  // 写操作统一从这里走：先清掉上一次的提示，成功给 success，失败给 error。
+  // 以前只 catch 到 setError，成功时上一条错误仍挂在页面上，用户会误以为操作失败了。
+  const act = (fn: () => Promise<unknown>, done?: string) => {
+    setError('');
+    setNotice('');
+    return fn()
+      .then(() => {
+        if (done) setNotice(done);
+        load();
+      })
+      .catch((e) => setError(errorMessage(e)));
+  };
 
   if (!q) return <p className="muted">{error || '加载中…'}</p>;
 
   const canManage = q.permissions.canManage;
+
+  const removeQuestion = () => {
+    if (!window.confirm('删除后问题将从列表和搜索中消失，且无法恢复。确定删除？')) return;
+    // 删除成功后原页面已经取不到数据，直接回列表，不留在 404 状态
+    act(() => api.deleteQuestion(q.id)).then(() => navigate('/', { replace: true })).catch(() => undefined);
+  };
 
   return (
     <div className="layout">
@@ -36,6 +55,10 @@ export function QuestionDetailPage() {
           {q.author.displayName} · {new Date(q.createdAt).toLocaleString('zh-CN')} · {q.viewCount} 次浏览
           {q.course && <> · 课程 {q.course.name}</>}
         </p>
+
+        {/* 全局提示放在正文上方，任何位置的写操作结果都在同一处反馈 */}
+        <div role="status" aria-live="polite">{notice && <p className="success">{notice}</p>}</div>
+        {error && <p className="error" role="alert">{error}</p>}
 
         <div className="post">
           <div className="votebox">
@@ -48,10 +71,20 @@ export function QuestionDetailPage() {
             <div dangerouslySetInnerHTML={{ __html: q.bodyHtml }} />
             <div className="tagrow">{q.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
             <CommentList comments={q.comments} targetType="QUESTION" targetId={q.id} onDone={load} canComment={!!me} />
+            {(q.permissions.canEdit || q.permissions.canDelete) && (
+              <div className="actions">
+                {q.permissions.canEdit && (
+                  <EditQuestionForm question={q} onDone={() => act(async () => undefined, '问题已更新')} />
+                )}
+                {q.permissions.canDelete && (
+                  <button className="danger" onClick={removeQuestion}>删除问题</button>
+                )}
+              </div>
+            )}
             {canManage && (
               <button className="link" onClick={() => {
                 const points = Number(prompt('悬赏积分（10–500）', '50'));
-                if (points) act(() => api.bounty(q.id, points, 7));
+                if (points) act(() => api.bounty(q.id, points, 7), '悬赏已发起');
               }}>发起悬赏
               </button>
             )}
@@ -76,8 +109,17 @@ export function QuestionDetailPage() {
               </p>
               <div className="actions">
                 {q.permissions.canAccept && !q.acceptedAnswerId &&
-                  <button onClick={() => act(() => api.accept(q.id, a.id))}>采纳此回答</button>}
-                {canManage && !a.endorsedBy && <button onClick={() => act(() => api.endorse(a.id))}>教师认证</button>}
+                  <button onClick={() => act(() => api.accept(q.id, a.id), '已采纳该回答')}>采纳此回答</button>}
+                {canManage && !a.endorsedBy && <button onClick={() => act(() => api.endorse(a.id), '已认证该回答')}>教师认证</button>}
+                {(a.canEdit || canManage) && (
+                  <EditAnswerForm answer={a} onDone={() => act(async () => undefined, '回答已更新')} />
+                )}
+                {(a.canEdit || canManage) && (
+                  <button className="danger" onClick={() => {
+                    if (!window.confirm('删除这条回答？该操作会同时减少问题的回答数。')) return;
+                    act(() => api.deleteAnswer(a.id), '回答已删除');
+                  }}>删除回答</button>
+                )}
               </div>
               <CommentList comments={a.comments} targetType="ANSWER" targetId={a.id} onDone={load} canComment={!!me} />
             </div>
@@ -92,11 +134,10 @@ export function QuestionDetailPage() {
             <button className="primary" onClick={() => act(async () => {
               await api.answer(q.id, draft);
               setDraft('');
-            })}>提交回答
+            }, '回答已提交')}>提交回答
             </button>
           </section>
         ) : <p className="muted"><Link to="/login">登录</Link>后可以回答与投票。</p>}
-        {error && <p className="error">{error}</p>}
       </article>
 
       <aside>
@@ -119,6 +160,30 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
 }) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    // 空评论后端会返回 400，这里先拦一道，避免用户点了一下没反应还以为是卡住了
+    if (!text.trim()) {
+      setError('评论内容不能为空');
+      return;
+    }
+    setSending(true);
+    setError('');
+    try {
+      await api.comment(targetType, targetId, text.trim());
+      setText('');
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      // 评论失败要把原因留在输入框下面，否则用户不知道是网络问题还是被限流
+      setError(errorMessage(e, '评论发表失败'));
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="comments">
       {comments.map((c) => (
@@ -129,12 +194,105 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
       ))}
       {canComment && (open ? (
         <div className="comment-form">
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="评论，可用 @昵称 提醒他人" />
-          <button onClick={() => api.comment(targetType, targetId, text).then(() => { setText(''); setOpen(false); onDone(); })}>
-            发表
-          </button>
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="评论，可用 @昵称 提醒他人"
+                 onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }} />
+          <button disabled={sending} onClick={() => void submit()}>{sending ? '发表中…' : '发表'}</button>
+          <button className="link" onClick={() => { setOpen(false); setError(''); }}>取消</button>
         </div>
       ) : <button className="link" onClick={() => setOpen(true)}>添加评论</button>)}
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
+/** 编辑问题：课程归属不允许在前端改，这里只提交标题 / 正文 / 标签。 */
+function EditQuestionForm({ question, onDone }: { question: QuestionDetail; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(question.title);
+  const [body, setBody] = useState(question.body);
+  const [tags, setTags] = useState(question.tags.join(' '));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await api.editQuestion(question.id, {
+        courseId: question.course?.id,
+        title,
+        body,
+        tags: tags.split(/[,，\s]+/).filter(Boolean),
+      });
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      setError(errorMessage(e, '保存失败'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return <button onClick={() => setOpen(true)}>编辑问题</button>;
+
+  return (
+    <div className="edit-form">
+      <label>标题
+        <input value={title} maxLength={150} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label>正文（Markdown）
+        <textarea rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
+      </label>
+      <label>标签（1–5 个）
+        <input value={tags} onChange={(e) => setTags(e.target.value)} />
+      </label>
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="actions">
+        <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '保存'}</button>
+        <button onClick={() => { setOpen(false); setError(''); }}>取消</button>
+      </div>
+    </div>
+  );
+}
+
+/** 编辑回答：正文与问题共用 MarkdownBody 的长度约束，前端只做空值拦截。 */
+function EditAnswerForm({ answer, onDone }: { answer: Answer; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [body, setBody] = useState(answer.body);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    if (!body.trim()) {
+      setError('回答内容不能为空');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      // 用正文覆盖原内容：AnswerView 只回渲染后的 bodyHtml，编辑必须以原始 Markdown 为起点
+      await api.editAnswer(answer.id, body);
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      setError(errorMessage(e, '保存失败'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return <button onClick={() => setOpen(true)}>编辑回答</button>;
+
+  return (
+    <div className="edit-form">
+      <label>回答内容（Markdown）
+        <textarea rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
+      </label>
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="actions">
+        <button className="primary" disabled={saving} onClick={() => void save()}>{saving ? '保存中…' : '保存'}</button>
+        <button onClick={() => { setOpen(false); setError(''); }}>取消</button>
+      </div>
     </div>
   );
 }

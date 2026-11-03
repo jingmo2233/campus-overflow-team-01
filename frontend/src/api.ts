@@ -62,6 +62,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 const get = <T>(path: string) => request<T>('GET', path);
 
+/**
+ * 把异常转成能直接展示给用户的文案。
+ * ApiError 的 message 来自后端 Problem Details 的 detail 字段（中文业务提示），
+ * 其余情况（组件里抛的普通 Error、未知异常）统一兜底，避免页面出现 "undefined"。
+ */
+export function errorMessage(e: unknown, fallback = '操作失败，请稍后重试'): string {
+  if (e instanceof ApiError) return e.message || fallback;
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+}
+
 export const api = {
   csrf: () => get<{ token: string }>('/v1/auth/csrf'),
   register: (body: Record<string, string>) => request<{ id: number }>('POST', '/v1/auth/register', body),
@@ -80,8 +91,14 @@ export const api = {
   ask: (body: { courseId?: number; title: string; body: string; tags: string[] }) =>
     request<{ id: number }>('POST', '/v1/questions', body),
   deleteQuestion: (id: number) => request<void>('DELETE', `/v1/questions/${id}`),
+  /** 编辑问题：后端 PUT /questions/{id} 接收的仍是完整 QuestionRequest，courseId 不参与更新。 */
+  editQuestion: (id: number, body: { courseId?: number; title: string; body: string; tags: string[] }) =>
+    request<void>('PUT', `/v1/questions/${id}`, body),
   answer: (questionId: number, body: string) =>
     request<{ id: number }>('POST', `/v1/questions/${questionId}/answers`, { body }),
+  editAnswer: (answerId: number, body: string) =>
+    request<void>('PUT', `/v1/answers/${answerId}`, { body }),
+  deleteAnswer: (answerId: number) => request<void>('DELETE', `/v1/answers/${answerId}`),
   accept: (questionId: number, answerId: number) =>
     request<void>('PUT', `/v1/questions/${questionId}/accepted-answer`, { answerId }),
   endorse: (answerId: number) => request<void>('POST', `/v1/answers/${answerId}/endorsement`, {}),

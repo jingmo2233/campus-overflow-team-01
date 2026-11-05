@@ -2,6 +2,7 @@ import type {
   Course, LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile,
   SearchResult,
 } from './types';
+import { textForCode } from './errors';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
 export class ApiError extends Error {
@@ -62,6 +63,28 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 const get = <T>(path: string) => request<T>('GET', path);
 
+/**
+ * 把异常转成能直接展示给用户的文案。
+ *
+ * 优先级（PB-19 验收标准 ②：按 errors.ts 显示中文提示，不显示裸 500）：
+ * 1. **已知错误码** → `errors.ts` 里的定稿文案。文案可控、与后端措辞解耦。
+ * 2. 未登记的码 → 按前缀兜底（见 errors.ts），仍是中文。
+ * 3. 都没有 → 后端 `detail`（可能是中文业务提示）。
+ * 4. 最后才是传入的 fallback / 通用文案。
+ *
+ * 之所以把本地表放在 `detail` 前面：后端文档明确要求「不要靠匹配错误消息文本判断，
+ * code 才是契约」，而 detail 会随文案调整变化，前端不该被它牵着走。
+ */
+export function errorMessage(e: unknown, fallback = '操作失败，请稍后重试'): string {
+  if (e instanceof ApiError) {
+    const byCode = textForCode(e.code);
+    if (byCode) return byCode;
+    return e.message || fallback;
+  }
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+}
+
 export const api = {
   csrf: () => get<{ token: string }>('/v1/auth/csrf'),
   register: (body: Record<string, string>) => request<{ id: number }>('POST', '/v1/auth/register', body),
@@ -80,8 +103,14 @@ export const api = {
   ask: (body: { courseId?: number; title: string; body: string; tags: string[] }) =>
     request<{ id: number }>('POST', '/v1/questions', body),
   deleteQuestion: (id: number) => request<void>('DELETE', `/v1/questions/${id}`),
+  /** 编辑问题：后端 PUT /questions/{id} 接收的仍是完整 QuestionRequest，courseId 不参与更新。 */
+  editQuestion: (id: number, body: { courseId?: number; title: string; body: string; tags: string[] }) =>
+    request<void>('PUT', `/v1/questions/${id}`, body),
   answer: (questionId: number, body: string) =>
     request<{ id: number }>('POST', `/v1/questions/${questionId}/answers`, { body }),
+  editAnswer: (answerId: number, body: string) =>
+    request<void>('PUT', `/v1/answers/${answerId}`, { body }),
+  deleteAnswer: (answerId: number) => request<void>('DELETE', `/v1/answers/${answerId}`),
   accept: (questionId: number, answerId: number) =>
     request<void>('PUT', `/v1/questions/${questionId}/accepted-answer`, { answerId }),
   endorse: (answerId: number) => request<void>('POST', `/v1/answers/${answerId}/endorsement`, {}),

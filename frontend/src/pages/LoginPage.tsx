@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
 
 export function LoginPage() {
@@ -15,6 +15,12 @@ export function LoginPage() {
     setForm({ ...form, [k]: e.target.value });
 
   const submit = async () => {
+    // 先清掉上一次的提示，否则重新提交时旧错误还挂在页面上
+    setError('');
+    if (!form.username.trim() || !form.password) {
+      setError('请填写学号/工号与密码');
+      return;
+    }
     try {
       if (mode === 'register') {
         await api.register(form);
@@ -22,7 +28,8 @@ export function LoginPage() {
       await login(form.username, form.password);
       navigate('/');
     } catch (e) {
-      setError((e as Error).message);
+      // 401 是密码错误、429 是失败次数过多，这两条必须给中文，不能把英文 message 丢给用户
+      setError(errorMessage(e, mode === 'register' ? '注册失败，请稍后重试' : '登录失败，请稍后重试'));
     }
   };
 

@@ -58,7 +58,8 @@ const QA_NOT_FOUND: Record<string, string> = {
 /** Reputation 上下文 —— 1xxx 业务规则段 */
 const REP_RULES: Record<string, string> = {
   'REP-1001': '这个问题已删除或已采纳，无法再发起悬赏',
-  'REP-1002': '可用悬赏积分不足',
+  // 后端这个码有两条不同语义的 detail（可用积分不足 / 冻结积分不足），前端只能取通用表述
+  'REP-1002': '积分不足，无法完成该操作',
   'REP-1003': '悬赏积分需在 10–500 之间',
   'REP-1004': '悬赏期限需在 1–14 天之间',
   'REP-1005': '不能赢取自己发起的悬赏',

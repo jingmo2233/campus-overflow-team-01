@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
-import type { Answer, QuestionDetail } from '../types';
+import type { Answer, Comment, Me, QuestionDetail } from '../types';
 
 export function QuestionDetailPage() {
   const { id } = useParams();
@@ -37,6 +37,28 @@ export function QuestionDetailPage() {
       .catch((e) => setError(errorMessage(e)));
   };
 
+  /**
+   * 评论成功后把新评论**就地插进当前状态**，不重取整个详情。
+   *
+   * PB-19 验收标准 ③ 要求「评论成功后无需整页刷新即可看到新内容」。
+   * 重取详情虽然不用刷浏览器，但会把整页正文重新渲染一遍：滚动位置可能跳动，
+   * 正在展开的编辑框 / 输入框状态也会被打断，所以改成只往对应的评论数组尾部追加。
+   *
+   * 顺序与后端一致：详情查询是 `ORDER BY created_at, id` 升序，新评论追加在尾部即正确位置。
+   */
+  const appendComment = useCallback((targetType: 'QUESTION' | 'ANSWER', targetId: number, c: Comment) => {
+    setQ((prev) => {
+      if (!prev) return prev;
+      if (targetType === 'QUESTION') {
+        return { ...prev, comments: [...prev.comments, c] };
+      }
+      return {
+        ...prev,
+        answers: prev.answers.map((a) => (a.id === targetId ? { ...a, comments: [...a.comments, c] } : a)),
+      };
+    });
+  }, []);
+
   if (!q) return <p className="muted">{error || '加载中…'}</p>;
 
   const canManage = q.permissions.canManage;
@@ -70,7 +92,8 @@ export function QuestionDetailPage() {
             {/* 正文由后端渲染并经 commonmark + OWASP Sanitizer 双重净化 */}
             <div dangerouslySetInnerHTML={{ __html: q.bodyHtml }} />
             <div className="tagrow">{q.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
-            <CommentList comments={q.comments} targetType="QUESTION" targetId={q.id} onDone={load} canComment={!!me} />
+            <CommentList comments={q.comments} targetType="QUESTION" targetId={q.id} me={me}
+                         onCreated={(c) => appendComment('QUESTION', q.id, c)} />
             {(q.permissions.canEdit || q.permissions.canDelete) && (
               <div className="actions">
                 {q.permissions.canEdit && (
@@ -121,7 +144,8 @@ export function QuestionDetailPage() {
                   }}>删除回答</button>
                 )}
               </div>
-              <CommentList comments={a.comments} targetType="ANSWER" targetId={a.id} onDone={load} canComment={!!me} />
+              <CommentList comments={a.comments} targetType="ANSWER" targetId={a.id} me={me}
+                           onCreated={(c) => appendComment('ANSWER', a.id, c)} />
             </div>
           </div>
         ))}
@@ -151,12 +175,20 @@ export function QuestionDetailPage() {
   );
 }
 
-function CommentList({ comments, targetType, targetId, onDone, canComment }: {
-  comments: { id: number; author: { displayName: string }; body: string; createdAt: string }[];
+/**
+ * 评论列表。发表成功后把新评论交给上层就地插入，不触发整页重取。
+ *
+ * `me` 同时承担两个职责：非空才显示输入框；非空才有作者信息可以拼出完整 Comment。
+ * 拼装之所以可行，是因为后端 `POST /v1/comments` 只回 `{ id }`，没有回完整视图，
+ * 而评论在页面上是纯文本展示（不像回答要经后端渲染 Markdown），
+ * 用当前登录态 + 本地时刻足以还原一条与服务端一致的记录。
+ */
+function CommentList({ comments, targetType, targetId, me, onCreated }: {
+  comments: Comment[];
   targetType: 'QUESTION' | 'ANSWER';
   targetId: number;
-  onDone: () => void;
-  canComment: boolean;
+  me: Me | null;
+  onCreated: (c: Comment) => void;
 }) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -165,17 +197,25 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
 
   const submit = async () => {
     // 空评论后端会返回 400，这里先拦一道，避免用户点了一下没反应还以为是卡住了
-    if (!text.trim()) {
+    const body = text.trim();
+    if (!body) {
       setError('评论内容不能为空');
       return;
     }
     setSending(true);
     setError('');
     try {
-      await api.comment(targetType, targetId, text.trim());
+      const { id } = await api.comment(targetType, targetId, body);
       setText('');
       setOpen(false);
-      onDone();
+      if (me) {
+        onCreated({
+          id,
+          author: { id: me.id, displayName: me.displayName, role: me.role, verified: me.verified },
+          body,
+          createdAt: new Date().toISOString(),
+        });
+      }
     } catch (e) {
       // 评论失败要把原因留在输入框下面，否则用户不知道是网络问题还是被限流
       setError(errorMessage(e, '评论发表失败'));
@@ -192,7 +232,7 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
           <span className="muted"> — {c.author.displayName}</span>
         </div>
       ))}
-      {canComment && (open ? (
+      {me && (open ? (
         <div className="comment-form">
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="评论，可用 @昵称 提醒他人"
                  onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }} />

@@ -35,8 +35,9 @@
         <commonmark.version>0.24.0</commonmark.version>
         <owasp-sanitizer.version>20240325.1</owasp-sanitizer.version>
         <jacoco.version>0.8.12</jacoco.version>
-        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）。学生版初始为 0，Sprint 4 前应提升到 0.80 -->
-        <domain.coverage.minimum>0</domain.coverage.minimum>
+        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）。实测 qa 93.24% / reputation 97.53% /
+             discovery 79.12% / identity 75.74%，留出测量波动余量取 0.75；Sprint 4 目标 0.80 -->
+        <domain.coverage.minimum>0.75</domain.coverage.minimum>
     </properties>
 
     <dependencyManagement>
@@ -193,6 +194,10 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
+    <!-- 覆盖率门禁 = 适应度函数 FF-4：原本四个 domain 模块各挂了一份规则，
+         理由却都是一样的「整体行覆盖不低于 domain.coverage.minimum」。
+         集中到这里一份，规则只维护一处；阈值仍由属性统一给，各模块需要不同口径时
+         再在模块 pom 里单独覆盖。 -->
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -202,6 +207,27 @@
                         <id>report</id>
                         <phase>verify</phase>
                         <goals><goal>report</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>check-coverage</id>
+                        <goals><goal>check</goal></goals>
+                        <!-- 不显式开启时，check 对不达标的 bundle 只打 WARNING，
+                             构建仍然 BUILD SUCCESS——门禁等于形同虚设，必须先跑一次反向验证确认它会红。 -->
+                        <configuration>
+                            <haltOnFailure>true</haltOnFailure>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${domain.coverage.minimum}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

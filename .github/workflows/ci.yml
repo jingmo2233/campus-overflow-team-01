@@ -7,8 +7,12 @@ on:
     branches: [ "main", "develop" ]
 
 env:
-  # 渐进式质量门禁：Sprint 1 阶段只测试这些模块
-  SPRINT_MODULES: co-shared-kernel, co-identity/co-identity-domain, co-identity/co-identity-application, co-qa/co-qa-domain, co-qa/co-qa-application
+  # 质量门禁覆盖全部四个限界上下文的领域层与应用层。
+  # 原先这份清单是 Sprint 1 的遗留，只有 shared-kernel / identity / qa 三个上下文；
+  # 而 qa-application 只依赖 qa-api、qa-domain、identity-api，identity-application 只依赖
+  # identity-api、identity-domain，没有任何依赖链能把 co-reputation / co-discovery 拉进
+  # `-am` 的 reactor，所以 Sprint 3 合入的这两个上下文的测试从未在 CI 执行过。
+  SPRINT_MODULES: co-shared-kernel, co-identity/co-identity-domain, co-identity/co-identity-application, co-qa/co-qa-domain, co-qa/co-qa-application, co-reputation/co-reputation-domain, co-reputation/co-reputation-application, co-discovery/co-discovery-domain, co-discovery/co-discovery-application
 
 jobs:
   backend:
@@ -29,8 +33,10 @@ jobs:
       - name: 安装所有依赖模块 (跳过测试)
         run: mvn -B -f backend/pom.xml install -DskipTests
 
-      - name: 单元测试 (Sprint范围)
-        run: mvn -B -f backend/pom.xml test -pl "$SPRINT_MODULES" -am
+      # 用 verify 而不是 test：jacoco 的 report 与 check 都绑定在 verify 阶段的
+      # prepare-agent -> report -> check 链上，只跑到 test 阶段的话覆盖率门禁一次都不会执行。
+      - name: 单元测试 + 覆盖率门禁 (领域层 + 应用层)
+        run: mvn -B -f backend/pom.xml verify -DskipITs -pl "$SPRINT_MODULES" -am
 
       - name: 架构约束检查
         run: mvn -B -f backend/pom.xml test -pl co-bootstrap -Dtest=ArchitectureTest

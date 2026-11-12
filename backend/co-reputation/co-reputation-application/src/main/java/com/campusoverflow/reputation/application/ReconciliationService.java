@@ -26,7 +26,14 @@ public class ReconciliationService {
 
     @Transactional(readOnly = true)
     public List<Mismatch> reconcile() {
-        // TODO(S3)：实现 ReconciliationService.reconcile——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：ReconciliationService.reconcile 尚未实现");
+        Map<Long, Long> ledgerSums = ledger.sumByUser();
+        List<Mismatch> mismatches = new ArrayList<>();
+        for (ReputationAccount account : accounts.findAll()) {
+            long sum = ledgerSums.getOrDefault(account.userId(), 0L);
+            if (account.reputation() != sum) {
+                mismatches.add(new Mismatch(account.userId(), account.reputation(), sum));
+            }
+        }
+        return mismatches;
     }
 }

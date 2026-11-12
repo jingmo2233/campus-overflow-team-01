@@ -36,53 +36,75 @@ public class NotificationProjector {
     @EventListener
     @Transactional
     public void on(AnswerSubmittedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        if (e.answerAuthorId() == e.questionAuthorId()) {
+            return;
+        }
+        notify(e.questionAuthorId(), NotificationType.ANSWER_RECEIVED,
+                name(e.answerAuthorId()) + " 回答了你的问题：" + e.questionTitle(),
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(AnswerAcceptedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        if (e.answerAuthorId() == e.questionAuthorId()) {
+            return;
+        }
+        notify(e.answerAuthorId(), NotificationType.ANSWER_ACCEPTED,
+                "你的回答被采纳：" + e.questionTitle(),
+                "/questions/" + e.questionId() + "#answer-" + e.answerId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(AnswerEndorsedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        if (e.answerAuthorId() == e.endorserId()) {
+            return;
+        }
+        notify(e.answerAuthorId(), NotificationType.ANSWER_ENDORSED,
+                "你的回答获得教师认证：" + e.questionTitle(),
+                "/questions/" + e.questionId() + "#answer-" + e.answerId(), e.eventId(), e.occurredAt());
     }
 
+    /** 评论里的 @昵称 逐个提醒（已去重、上限 5 人）。 */
     @EventListener
     @Transactional
     public void on(CommentPostedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        for (String nickname : MentionParser.extract(e.body())) {
+            identity.findByDisplayName(nickname)
+                    .filter(user -> user.id() != e.authorId())
+                    .ifPresent(user -> notify(user.id(), NotificationType.MENTIONED,
+                            name(e.authorId()) + " 在评论中提到了你",
+                            "/questions/" + e.questionId(), e.eventId(), e.occurredAt()));
+        }
     }
 
     @EventListener
     @Transactional
     public void on(BountyAwardedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.winnerId(), NotificationType.BOUNTY_AWARDED,
+                "你赢得了悬赏：" + e.points() + " 积分",
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(BadgeAwardedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.userId(), NotificationType.BADGE_AWARDED,
+                "你获得了新徽章：" + e.badgeName(),
+                "/users/" + e.userId() + "/reputation", e.eventId(), e.occurredAt());
     }
 
+    /** 幂等键 (sourceEventId, recipientId)：同一事件重复投递不会产生重复通知。 */
     private void notify(long recipientId, NotificationType type, String title, String link, String eventId,
                         java.time.Instant at) {
-        // TODO(S3)：实现 NotificationProjector.notify——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.notify 尚未实现");
+        if (notifications.exists(eventId, recipientId)) {
+            return;
+        }
+        notifications.save(Notification.create(recipientId, type, title, link, eventId, at));
     }
 
     private String name(long userId) {
-        // TODO(S3)：实现 NotificationProjector.name——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.name 尚未实现");
+        return identity.findUser(userId).map(UserSummary::displayName).orElse("某位同学");
     }
 }

@@ -1,5 +1,6 @@
 package com.campusoverflow.discovery.domain.notification;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -24,6 +25,7 @@ public final class MentionParser {
         while (matcher.find() && mentions.size() < MAX_MENTIONS) {
             mentions.add(matcher.group(1));
         }
-        return Set.copyOf(mentions);
+        // 保持首次出现顺序（Set.copyOf 会丢失顺序，测试要求保序）
+        return Collections.unmodifiableSet(mentions);
     }
 }

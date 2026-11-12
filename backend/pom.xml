@@ -35,8 +35,9 @@
         <commonmark.version>0.24.0</commonmark.version>
         <owasp-sanitizer.version>20240325.1</owasp-sanitizer.version>
         <jacoco.version>0.8.12</jacoco.version>
-        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）。实测 qa 93.24% / reputation 97.53% /
-             discovery 79.12% / identity 75.74%，留出测量波动余量取 0.75；Sprint 4 目标 0.80 -->
+        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）。实测 co-qa-domain 93.24% /
+             co-reputation-domain 100%（含 PR #107）/ co-discovery-domain 79.12% /
+             co-identity-domain 75.74%，留出测量波动余量取 0.75；Sprint 4 目标 0.80 -->
         <domain.coverage.minimum>0.75</domain.coverage.minimum>
     </properties>
 

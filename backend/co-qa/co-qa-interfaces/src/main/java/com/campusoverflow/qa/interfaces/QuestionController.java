@@ -4,6 +4,7 @@ import com.campusoverflow.qa.application.command.EditQuestionCommand;
 import com.campusoverflow.qa.application.command.PostQuestionCommand;
 import com.campusoverflow.qa.application.command.QuestionCommandService;
 import com.campusoverflow.qa.application.query.QuestionDetailView;
+import com.campusoverflow.qa.application.query.QuestionFilter;
 import com.campusoverflow.qa.application.query.QuestionQueryService;
 import com.campusoverflow.qa.application.query.QuestionSummaryView;
 import com.campusoverflow.shared.page.PageRequest;
@@ -44,12 +45,16 @@ public class QuestionController {
         this.queries = queries;
     }
 
-    @Operation(summary = "问题列表（最新优先，可按课程过滤）")
+    @Operation(summary = "问题列表（可按课程 / 标签 / 未回答过滤，支持按最新、得分、回答数排序）")
     @GetMapping
     public PageResult<QuestionSummaryView> list(@RequestParam(required = false) Long courseId,
+                                                @RequestParam(required = false) String tag,
+                                                @RequestParam(defaultValue = "newest") String sort,
+                                                @RequestParam(defaultValue = "false") boolean unanswered,
                                                 @RequestParam(defaultValue = "1") int page,
                                                 @RequestParam(defaultValue = "20") int size) {
-        return queries.list(courseId, new PageRequest(page, size));
+        QuestionFilter filter = QuestionFilter.of(courseId, tag, QuestionFilter.Sort.parse(sort), unanswered);
+        return queries.list(filter, new PageRequest(page, size));
     }
 
     @Operation(summary = "发布问题")

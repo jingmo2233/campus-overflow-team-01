@@ -3,6 +3,7 @@ package com.campusoverflow.qa.infrastructure.query;
 import com.campusoverflow.qa.application.port.QaReadModel;
 import com.campusoverflow.qa.application.query.AnswerRow;
 import com.campusoverflow.qa.application.query.CommentRow;
+import com.campusoverflow.qa.application.query.QuestionFilter;
 import com.campusoverflow.qa.application.query.QuestionRow;
 import com.campusoverflow.qa.application.query.TagView;
 import com.campusoverflow.shared.page.PageRequest;
@@ -38,15 +39,40 @@ public class JdbcQaReadModel implements QaReadModel {
     }
 
     @Override
-    public PageResult<QuestionRow> listQuestions(Long courseId, PageRequest page) {
-        String where = " WHERE deleted_at IS NULL" + (courseId != null ? " AND course_id = :courseId" : "");
+    public PageResult<QuestionRow> listQuestions(QuestionFilter filter, PageRequest page) {
+        List<String> conditions = new ArrayList<>();
+        conditions.add("q.deleted_at IS NULL");
         MapSqlParameterSource p = new MapSqlParameterSource()
-                .addValue("courseId", courseId).addValue("limit", page.size()).addValue("offset", page.offset());
-        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM qa_question" + where, p, Long.class);
-        List<QuestionRow> rows = jdbc.query("SELECT " + QUESTION_COLUMNS.formatted("LEFT(body, 600)")
-                + " FROM qa_question" + where + " ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset", p,
-                (rs, i) -> mapQuestion(rs, List.of()));
+                .addValue("limit", page.size()).addValue("offset", page.offset());
+
+        if (filter.courseId() != null) {
+            conditions.add("q.course_id = :courseId");
+            p.addValue("courseId", filter.courseId());
+        }
+        if (filter.tag() != null) {
+            // EXISTS 而不是 JOIN：同一个问题即使有多个标签也不会被查成多行。
+            conditions.add("EXISTS (SELECT 1 FROM qa_question_tag t WHERE t.question_id = q.id AND t.tag = :tag)");
+            p.addValue("tag", filter.tag());
+        }
+        if (filter.unanswered()) {
+            conditions.add("q.answer_count = 0");
+        }
+
+        String where = " WHERE " + String.join(" AND ", conditions);
+        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM qa_question q" + where, p, Long.class);
+        List<QuestionRow> rows = jdbc.query("SELECT " + QUESTION_COLUMNS.formatted("LEFT(q.body, 600)")
+                + " FROM qa_question q" + where + " ORDER BY " + orderBy(filter.sort())
+                + " LIMIT :limit OFFSET :offset", p, (rs, i) -> mapQuestion(rs, List.of()));
         return new PageResult<>(withTags(rows), total == null ? 0 : total, page.page(), page.size());
+    }
+
+    /** 排序片段集中在这里，应用层只表达“按什么排”，不关心 SQL。 */
+    private static String orderBy(QuestionFilter.Sort sort) {
+        return switch (sort) {
+            case NEWEST -> "q.created_at DESC, q.id DESC";
+            case VOTES -> "q.score DESC, q.created_at DESC, q.id DESC";
+            case ANSWERS -> "q.answer_count DESC, q.created_at DESC, q.id DESC";
+        };
     }
 
     @Override

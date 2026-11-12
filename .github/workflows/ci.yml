@@ -7,8 +7,8 @@ on:
     branches: [ "main", "develop" ]
 
 env:
-  # 渐进式质量门禁：Sprint 1 阶段只测试这些模块
-  SPRINT_MODULES: co-shared-kernel, co-identity/co-identity-domain, co-identity/co-identity-application, co-qa/co-qa-domain, co-qa/co-qa-application
+  # S3 起全部上下文都已实现，质量门禁覆盖全仓（不再只跑 Sprint 1 的 5 个模块）
+  TEST_SCOPE: all
 
 jobs:
   backend:
@@ -29,8 +29,9 @@ jobs:
       - name: 安装所有依赖模块 (跳过测试)
         run: mvn -B -f backend/pom.xml install -DskipTests
 
-      - name: 单元测试 (Sprint范围)
-        run: mvn -B -f backend/pom.xml test -pl "$SPRINT_MODULES" -am
+      # Reputation / Discovery 的领域层与应用层测试从这里开始也进入门禁
+      - name: 单元测试 (全部模块)
+        run: mvn -B -f backend/pom.xml test
 
       - name: 架构约束检查
         run: mvn -B -f backend/pom.xml test -pl co-bootstrap -Dtest=ArchitectureTest

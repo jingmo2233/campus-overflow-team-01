@@ -137,6 +137,67 @@ class CampusOverflowFlowIT {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void 按标签浏览与排序筛选在数据库层生效() throws Exception {
+        register("2026010", "测试小林", "it-lin@campus.edu.cn");
+        register("2026011", "测试小周", "it-zhou@campus.edu.cn");
+        MockHttpSession lin = login("2026010");
+        MockHttpSession zhou = login("2026011");
+
+        long votedQuestion = idOf(mvc.perform(post("/api/v1/questions").session(lin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Go 的 GMP 调度器如何避免全局队列竞争？",
+                                 "body":"想了解 work stealing 在多核下如何减少全局队列竞争，以及和固定线程池方案的差异。",
+                                 "tags":["端到端筛选验证","并发编程"]}
+                                """))
+                .andExpect(status().isCreated()).andReturn());
+
+        long newerQuestion = idOf(mvc.perform(post("/api/v1/questions").session(lin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"MySQL 的间隙锁在可重复读下解决了什么问题？",
+                                 "body":"记录锁之外还需要间隙锁，主要是为了防止幻读吗？为什么只在可重复读隔离级别下生效？",
+                                 "tags":["端到端筛选验证","数据库"]}
+                                """))
+                .andExpect(status().isCreated()).andReturn());
+
+        // 给较早的问题投一票，使得分排序与时间排序结果相反
+        mvc.perform(put("/api/v1/votes").session(zhou).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetType\":\"QUESTION\",\"targetId\":" + votedQuestion + ",\"value\":1}"))
+                .andExpect(status().isOk());
+
+        // 标签浏览：只返回带该标签的问题
+        mvc.perform(get("/api/v1/tags/{tag}/questions", "端到端筛选验证"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2));
+
+        // 不存在的标签返回空页而不是 404
+        mvc.perform(get("/api/v1/tags/{tag}/questions", "端到端不存在的标签"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+
+        // 得分排序：被投票的那条排第一
+        mvc.perform(get("/api/v1/questions").param("tag", "端到端筛选验证").param("sort", "votes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(votedQuestion))
+                .andExpect(jsonPath("$.items[0].score").value(1));
+
+        // 最新排序：后发布的那条排第一
+        mvc.perform(get("/api/v1/questions").param("tag", "端到端筛选验证").param("sort", "newest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(newerQuestion));
+
+        // 未回答筛选：两条都还没人回答
+        mvc.perform(get("/api/v1/questions").param("tag", "端到端筛选验证").param("unanswered", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2));
+
+        // 非法排序参数 → 400
+        mvc.perform(get("/api/v1/questions").param("sort", "hot"))
+                .andExpect(status().isBadRequest());
+    }
+
     private long register(String username, String displayName, String email) throws Exception {
         MvcResult result = mvc.perform(post("/api/v1/auth/register").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

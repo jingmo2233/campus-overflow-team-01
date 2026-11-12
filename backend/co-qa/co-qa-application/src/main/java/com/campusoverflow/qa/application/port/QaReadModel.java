@@ -2,6 +2,7 @@ package com.campusoverflow.qa.application.port;
 
 import com.campusoverflow.qa.application.query.AnswerRow;
 import com.campusoverflow.qa.application.query.CommentRow;
+import com.campusoverflow.qa.application.query.QuestionFilter;
 import com.campusoverflow.qa.application.query.QuestionRow;
 import com.campusoverflow.qa.application.query.TagView;
 import com.campusoverflow.shared.page.PageRequest;
@@ -16,7 +17,11 @@ import java.util.Optional;
  * 所有查询默认排除已软删除的内容。
  */
 public interface QaReadModel {
-    PageResult<QuestionRow> listQuestions(Long courseId, PageRequest page);
+    /**
+     * 按筛选条件分页查询问题：课程、标签、未回答与排序都在 SQL 层完成，
+     * 避免把全量数据捞到内存里再过滤。
+     */
+    PageResult<QuestionRow> listQuestions(QuestionFilter filter, PageRequest page);
 
     Optional<QuestionRow> findQuestion(long questionId);
 

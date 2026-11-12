@@ -1,6 +1,7 @@
 package com.campusoverflow.qa.infrastructure.cache;
 
 import com.campusoverflow.qa.application.port.QuestionListCache;
+import com.campusoverflow.qa.application.query.QuestionFilter;
 import com.campusoverflow.qa.application.query.QuestionSummaryView;
 import com.campusoverflow.shared.page.PageRequest;
 import com.campusoverflow.shared.page.PageResult;
@@ -37,9 +38,9 @@ public class RedisQuestionListCache implements QuestionListCache {
     }
 
     @Override
-    public Optional<PageResult<QuestionSummaryView>> get(Long courseId, PageRequest page) {
+    public Optional<PageResult<QuestionSummaryView>> get(QuestionFilter filter, PageRequest page) {
         try {
-            String json = redis.opsForValue().get(key(courseId, page));
+            String json = redis.opsForValue().get(key(filter, page));
             return json == null ? Optional.empty() : Optional.of(mapper.readValue(json, TYPE));
         } catch (Exception e) {
             log.debug("列表缓存读取失败，回源数据库: {}", e.getMessage());
@@ -48,10 +49,10 @@ public class RedisQuestionListCache implements QuestionListCache {
     }
 
     @Override
-    public void put(Long courseId, PageRequest page, PageResult<QuestionSummaryView> value) {
+    public void put(QuestionFilter filter, PageRequest page, PageResult<QuestionSummaryView> value) {
         try {
             Duration ttl = Duration.ofSeconds(60 + ThreadLocalRandom.current().nextInt(15)); // TTL 抖动防雪崩
-            redis.opsForValue().set(key(courseId, page), mapper.writeValueAsString(value), ttl);
+            redis.opsForValue().set(key(filter, page), mapper.writeValueAsString(value), ttl);
         } catch (Exception e) {
             log.debug("列表缓存写入失败: {}", e.getMessage());
         }
@@ -78,8 +79,9 @@ public class RedisQuestionListCache implements QuestionListCache {
         }
     }
 
-    private String key(Long courseId, PageRequest page) {
+    /** 键里带上筛选维度，避免「按标签看」和「全站列表」互相串缓存。 */
+    private String key(QuestionFilter filter, PageRequest page) {
         String gen = Optional.ofNullable(redis.opsForValue().get(GEN_KEY)).orElse("0");
-        return "qa:list:" + gen + ":" + (courseId == null ? "all" : courseId) + ":" + page.page() + ":" + page.size();
+        return "qa:list:" + gen + ":" + filter.cacheKey() + ":" + page.page() + ":" + page.size();
     }
 }

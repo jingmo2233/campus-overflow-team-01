@@ -45,20 +45,20 @@ public class QuestionQueryService {
     }
 
     /** Cache-Aside：列表不含「我的投票」，与登录态无关，因此可以整页缓存给所有用户复用。 */
-    public PageResult<QuestionSummaryView> list(Long courseId, PageRequest page) {
-        Optional<PageResult<QuestionSummaryView>> cached = cache.get(courseId, page);
+    public PageResult<QuestionSummaryView> list(QuestionFilter filter, PageRequest page) {
+        Optional<PageResult<QuestionSummaryView>> cached = cache.get(filter, page);
         if (cached.isPresent()) {
             return cached.get();
         }
 
-        PageResult<QuestionRow> rows = readModel.listQuestions(courseId, page);
+        PageResult<QuestionRow> rows = readModel.listQuestions(filter, page);
         Map<Long, UserSummary> authors = identity.findUsers(
                 rows.items().stream().map(QuestionRow::authorId).collect(Collectors.toSet()));
         PageResult<QuestionSummaryView> result = rows.map(row -> new QuestionSummaryView(row.id(), row.title(),
                 renderer.toPlainText(row.body(), EXCERPT_LENGTH), row.tags(), row.courseId(),
                 AuthorView.of(row.authorId(), authors.get(row.authorId())), row.score(), row.answerCount(),
                 row.viewCount(), row.acceptedAnswerId() != null, row.createdAt()));
-        cache.put(courseId, page, result);
+        cache.put(filter, page, result);
         return result;
     }
 

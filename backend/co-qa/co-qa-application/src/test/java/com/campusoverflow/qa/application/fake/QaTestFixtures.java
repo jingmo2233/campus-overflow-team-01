@@ -4,6 +4,7 @@ import com.campusoverflow.identity.api.CourseSummary;
 import com.campusoverflow.identity.api.IdentityApi;
 import com.campusoverflow.identity.api.UserSummary;
 import com.campusoverflow.qa.application.port.QuestionListCache;
+import com.campusoverflow.qa.application.query.QuestionFilter;
 import com.campusoverflow.qa.application.query.QuestionSummaryView;
 import com.campusoverflow.qa.domain.Answer;
 import com.campusoverflow.qa.domain.AnswerRepository;
@@ -179,14 +180,18 @@ public final class QaTestFixtures {
 
     public static class CountingCache implements QuestionListCache {
         public int invalidations;
+        public int gets;
+        public int puts;
 
         @Override
-        public Optional<PageResult<QuestionSummaryView>> get(Long courseId, PageRequest page) {
+        public Optional<PageResult<QuestionSummaryView>> get(QuestionFilter filter, PageRequest page) {
+            gets++;
             return Optional.empty();
         }
 
         @Override
-        public void put(Long courseId, PageRequest page, PageResult<QuestionSummaryView> value) {
+        public void put(QuestionFilter filter, PageRequest page, PageResult<QuestionSummaryView> value) {
+            puts++;
         }
 
         @Override

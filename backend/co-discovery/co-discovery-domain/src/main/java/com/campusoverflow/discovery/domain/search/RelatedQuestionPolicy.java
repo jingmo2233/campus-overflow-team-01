@@ -12,14 +12,23 @@ public final class RelatedQuestionPolicy {
     private RelatedQuestionPolicy() {
     }
 
+    /** J(A,B) = |A∩B| / |A∪B|；并集为空时返回 0。 */
     public static double jaccard(int shared, int sizeA, int sizeB) {
-        // TODO(S3)：实现 RelatedQuestionPolicy.jaccard——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：RelatedQuestionPolicy.jaccard 尚未实现");
+        int union = sizeA + sizeB - shared;
+        return union <= 0 ? 0.0 : (double) shared / union;
     }
 
-    public static List<SearchIndex.RelatedCandidate> rank(List<SearchIndex.RelatedCandidate> candidates, int ownTagCount,
-                                                          int limit) {
-        // TODO(S3)：实现 RelatedQuestionPolicy.rank——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：RelatedQuestionPolicy.rank 尚未实现");
+    /** 按相似度降序排列，相似度相同则得分高者优先、已采纳者次之。 */
+    public static List<SearchIndex.RelatedCandidate> rank(List<SearchIndex.RelatedCandidate> candidates,
+                                                          int ownTagCount, int limit) {
+        return candidates.stream()
+                .sorted(Comparator
+                        .comparingDouble((SearchIndex.RelatedCandidate c) ->
+                                jaccard(c.sharedTags(), c.tagCount(), ownTagCount)).reversed()
+                        .thenComparing(Comparator.comparingInt(SearchIndex.RelatedCandidate::score).reversed())
+                        .thenComparing(Comparator.comparing(SearchIndex.RelatedCandidate::accepted).reversed())
+                        .thenComparing(SearchIndex.RelatedCandidate::questionId))
+                .limit(limit)
+                .toList();
     }
 }
